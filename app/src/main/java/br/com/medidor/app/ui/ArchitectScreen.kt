@@ -365,7 +365,7 @@ private fun FloorPlanCanvas(
                 }
             }
         ) {
-            val r = fittedRect(size, bitmap)
+            val r = fittedRect(IntSize(size.width.toInt(), size.height.toInt()), bitmap)
             fun center(point: PlanPoint) =
                 Offset(r.left + point.x * r.width, r.top + point.y * r.height)
             val refA = floor.referenceStart
