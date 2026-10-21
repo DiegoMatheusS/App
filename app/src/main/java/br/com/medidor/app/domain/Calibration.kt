@@ -27,10 +27,21 @@ object PhotoCalibration {
         return hypot((a.x - b.x).toDouble() * imageWidth, (a.y - b.y).toDouble() * imageHeight)
     }
 
+    fun manualReferenceMillimeters(value: String, unit: LengthUnit): Double? =
+        value.trim().replace(',', '.').toDoubleOrNull()
+            ?.takeIf { it.isFinite() && it > 0.0 }
+            ?.let { (it * unit.millimeters).takeIf { mm -> mm.isFinite() && mm > 0.0 } }
+
     fun millimetersFromReference(referenceMm: Double, referencePixels: Double, targetPixels: Double): Double {
         require(referenceMm.isFinite() && referenceMm > 0.0)
         require(referencePixels.isFinite() && referencePixels > 0.0)
         require(targetPixels.isFinite() && targetPixels >= 0.0)
         return referenceMm * targetPixels / referencePixels
     }
+}
+
+enum class LengthUnit(val label: String, val millimeters: Double) {
+    MILLIMETERS("mm", 1.0),
+    CENTIMETERS("cm", 10.0),
+    METERS("m", 1000.0)
 }
