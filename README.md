@@ -7,8 +7,8 @@ Primeira entrega do app de medições, em **Kotlin + Jetpack Compose**. Android 
 - Navegação e identidade visual inicial para os módulos de medição, tanques, câmera, projetos e Pro.
 - Cálculo offline de caixas (volume, área de piso e área superficial).
 - Cálculo de tanques cilíndricos verticais/horizontais e esféricos, com nível de líquido, capacidade total e livre.
-- Foto capturada via CameraX; seleção de 2 pontos de uma moeda e 2 pontos do objeto no **mesmo plano** para medir por escala.
-- Cadastro simples local de resultados de cálculo.
+- Foto capturada via CameraX **ou importada da galeria**; calibração por moeda ou distância conhecida (mm/cm/m), quatro pontos no **mesmo plano**, com opção de desfazer marcações.
+- Histórico local de resultados, exclusão individual com confirmação e compartilhamento como relatório de texto.
 - Tela informativa Pro completo (preço de referência **R$ 129,90**, pagamento único). **Não há compra habilitada nem desbloqueio falso.**
 - Testes unitários para cálculos e calibração.
 
@@ -29,7 +29,7 @@ No Android Studio: abrir a pasta do projeto, instalar Android SDK 37 e sincroniz
 
 ## Roadmap
 
-1. Melhorar foto calibrada: controle de perspectiva, gestão de fotos e calibração.
+1. Melhorar foto calibrada: retificação de perspectiva, zoom de precisão, galeria de imagens associadas às medições.
 2. Persistência Room, projetos/relatórios e testes instrumentados.
 3. Modo Arquiteto: planta 2D assistida -> paredes 3D -> ARCore -> múltiplos andares.
 4. Scanner 3D por fotogrametria offline, com benchmarks de hardware.

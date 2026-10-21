@@ -66,6 +66,8 @@ fun AppShell() {
                 Destination.HISTORY -> HistoryScreen(records = records, onDeleteAll = {
                     store.clear()
                     records = emptyList()
+                }, onDeleteOne = { index ->
+                    records = store.deleteAt(index)
                 })
                 Destination.PRO -> ProScreen()
                 Destination.ARCHITECT -> PlannedFeatureScreen(
