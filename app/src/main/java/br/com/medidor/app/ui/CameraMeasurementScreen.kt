@@ -3,8 +3,6 @@ package br.com.medidor.app.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -31,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -39,11 +39,12 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -52,8 +53,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.exifinterface.media.ExifInterface
 import br.com.medidor.app.domain.BrazilianCoin
+import br.com.medidor.app.domain.LengthUnit
 import br.com.medidor.app.domain.NormalizedPoint
 import br.com.medidor.app.domain.PhotoCalibration
 import java.io.File
@@ -76,40 +77,82 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
     }
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var coin by remember { mutableStateOf(BrazilianCoin.TWENTY_FIVE_CENTS) }
+    var mode by remember { mutableStateOf("coin") }
+    var manualSize by remember { mutableStateOf("10") }
+    var manualUnit by remember { mutableStateOf(LengthUnit.CENTIMETERS) }
+    var screenError by remember { mutableStateOf<String?>(null) }
     val points = remember { mutableStateListOf<NormalizedPoint>() }
     var saved by remember { mutableStateOf(false) }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            try {
+                bitmap = SampledPhotos.fromUri(context.contentResolver, uri)
+                points.clear()
+                saved = false
+                screenError = null
+            } catch (e: Exception) {
+                screenError = "Não foi possível abrir a fotografia: ${e.localizedMessage}"
+            }
+        }
+    }
     Column(
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Foto calibrada por moeda", style = MaterialTheme.typography.titleLarge)
-        Text("Coloque uma moeda ao lado do objeto, no MESMO PLANO. Capture a foto e toque nas extremidades.",
+        Text("Medir por fotografia", style = MaterialTheme.typography.titleLarge)
+        Text("Calibre com uma moeda ou distância conhecida no MESMO PLANO da medida.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (bitmap == null) {
+            OutlinedButton(onClick = { pickPhoto.launch("image/*") }) { Text("Escolher foto da galeria") }
             if (granted) {
                 CameraPreviewAndCapture(
-                    onPhoto = { bitmap = it; points.clear(); saved = false },
-                    onError = { error -> TextErrorSink.lastError = error }
+                    onPhoto = { bitmap = it; points.clear(); saved = false; screenError = null },
+                    onError = { error -> screenError = error }
                 )
-                TextErrorSink.lastError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error)
-                }
             } else {
                 Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) {
                     Text("Permitir câmera")
                 }
-                Text("A permissão é usada somente durante a captura, sem upload de imagens.")
+                Text("É possível usar a galeria sem dar permissão para a câmera.")
             }
         } else {
             val photo = bitmap!!
-            Text("1. Escolha a moeda utilizada:", fontWeight = FontWeight.Medium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(BrazilianCoin.entries) { item ->
-                    FilterChip(
-                        selected = coin == item,
-                        onClick = { coin = item; saved = false },
-                        label = { Text(item.label) }
-                    )
+            Text("1. Referência para a escala:", fontWeight = FontWeight.Medium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = mode == "coin", onClick = {
+                    mode = "coin"; points.clear(); saved = false
+                }, label = { Text("Moeda") })
+                FilterChip(selected = mode == "manual", onClick = {
+                    mode = "manual"; points.clear(); saved = false
+                }, label = { Text("Distância conhecida") })
+            }
+            if (mode == "coin") {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(BrazilianCoin.entries) { item ->
+                        FilterChip(
+                            selected = coin == item,
+                            onClick = { coin = item; saved = false },
+                            label = { Text(item.label) }
+                        )
+                    }
+                }
+            } else {
+                OutlinedTextField(
+                    value = manualSize,
+                    onValueChange = { manualSize = it; saved = false },
+                    label = { Text("Medida da referência") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(LengthUnit.entries) { unit ->
+                        FilterChip(
+                            selected = manualUnit == unit,
+                            onClick = { manualUnit = unit; saved = false },
+                            label = { Text(unit.label) }
+                        )
+                    }
                 }
             }
             Box(Modifier.fillMaxWidth().height(340.dp)) {
@@ -156,46 +199,53 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                 }
             }
             val prompt = when (points.size) {
-                0 -> "2. Toque em uma extremidade do diâmetro da moeda."
-                1 -> "3. Toque na outra extremidade do diâmetro da moeda."
+                0 -> "2. Marque o início da referência."
+                1 -> "3. Marque o fim da referência."
                 2 -> "4. Toque no ponto inicial do objeto."
                 3 -> "5. Toque no ponto final do objeto."
                 else -> "Medição concluída. Confira os pontos."
             }
             Text(prompt, fontWeight = FontWeight.Medium)
-            val mm = if (points.size == 4) {
+            val referenceMm = if (mode == "coin") coin.diameterMm
+                else PhotoCalibration.manualReferenceMillimeters(manualSize, manualUnit)
+            if (referenceMm == null) {
+                Text("Digite uma medida positiva e válida.", color = MaterialTheme.colorScheme.error)
+            }
+            val mm = if (points.size == 4 && referenceMm != null) {
                 val reference = PhotoCalibration.distancePixels(points[0], points[1], photo.width, photo.height)
                 val target = PhotoCalibration.distancePixels(points[2], points[3], photo.width, photo.height)
                 if (reference > 0.0) PhotoCalibration.millimetersFromReference(
-                    coin.diameterMm, reference, target) else null
+                    referenceMm, reference, target) else null
             } else null
-            if (points.size == 4 && mm == null) {
+            if (points.size == 4 && mm == null && referenceMm != null) {
                 Text("A referência precisa ter dois pontos diferentes.", color = MaterialTheme.colorScheme.error)
             }
             if (mm != null) {
                 ResultCard("Distância estimada no plano da moeda", "${decimal(mm)} mm • ${decimal(mm / 10)} cm")
                 Button(onClick = {
-                    onSave("Foto com moeda: ${coin.label}", "${decimal(mm)} mm (estimado, mesma superfície)")
+                    onSave("Foto ${if (mode == "coin") coin.label else "referência manual"}",
+                        "${decimal(mm)} mm (estimado, mesmo plano; ref. ${decimal(referenceMm!!)} mm)")
                     saved = true
                 }) { Text("Salvar resultado") }
                 if (saved) Text("Resultado salvo neste aparelho.")
+            }
+            if (points.isNotEmpty()) {
+                OutlinedButton(onClick = { points.removeAt(points.lastIndex); saved = false }) {
+                    Text("Desfazer último ponto")
+                }
             }
             OutlinedButton(onClick = { points.clear(); saved = false }) {
                 Text("Recomeçar marcações")
             }
             OutlinedButton(onClick = { bitmap = null; points.clear(); saved = false }) {
-                Text("Tirar outra foto")
+                Text("Escolher outra imagem")
             }
         }
-        Text("ATENÇÃO: escala válida somente para medidas no mesmo plano da moeda, sem inclinação relevante. " +
-            "Não mede profundidade nem substitui paquímetro, trena ou arqueação.",
+        screenError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Text("ATENÇÃO: referência e objeto devem estar no mesmo plano e perspectiva semelhante. " +
+            "Não há correção de perspectiva nem medição de profundidade.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-}
-
-/** Temporary UI error holder (not persisted and never shared externally). */
-private object TextErrorSink {
-    var lastError by mutableStateOf<String?>(null)
 }
 
 @Composable
@@ -251,10 +301,7 @@ private fun CameraPreviewAndCapture(onPhoto: (Bitmap) -> Unit, onError: (String)
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     try {
-                        val decoded = BitmapFactory.decodeFile(file.absolutePath)
-                            ?: error("Arquivo de imagem inválido")
-                        val corrected = orientBitmap(decoded, file)
-                        onPhoto(corrected)
+                        onPhoto(SampledPhotos.fromFile(file))
                     } catch (error: Exception) {
                         onError(error.localizedMessage ?: "Não foi possível ler a fotografia.")
                     } finally {
@@ -268,21 +315,6 @@ private fun CameraPreviewAndCapture(onPhoto: (Bitmap) -> Unit, onError: (String)
             }
         )
     }) { Text("Capturar fotografia") }
-}
-
-private fun orientBitmap(bitmap: Bitmap, file: File): Bitmap {
-    val angle = when (ExifInterface(file.absolutePath).getAttributeInt(
-        ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
-    )) {
-        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-        else -> 0f
-    }
-    if (angle == 0f) return bitmap
-    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, Matrix().apply {
-        postRotate(angle)
-    }, true).also { if (it !== bitmap) bitmap.recycle() }
 }
 
 private data class ImageRect(val left: Float, val top: Float, val width: Float, val height: Float)

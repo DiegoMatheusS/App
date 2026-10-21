@@ -44,6 +44,14 @@ class LocalHistory(context: Context) {
 
     fun clear() = prefs.edit().remove("records").apply()
 
+    fun deleteAt(index: Int): List<MeasurementRecord> {
+        val current = load()
+        if (index !in current.indices) return current
+        val updated = current.toMutableList().apply { removeAt(index) }
+        persist(updated)
+        return updated
+    }
+
     private fun persist(records: List<MeasurementRecord>) {
         val array = JSONArray()
         records.forEach { record ->
