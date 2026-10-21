@@ -217,7 +217,7 @@ private fun CameraPreviewAndCapture(onPhoto: (Bitmap) -> Unit, onError: (String)
                     try {
                         val provider = future.get()
                         val preview = Preview.Builder().build().apply {
-                            surfaceProvider = view.surfaceProvider
+                            setSurfaceProvider(view.surfaceProvider)
                         }
                         val capture = ImageCapture.Builder()
                             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
