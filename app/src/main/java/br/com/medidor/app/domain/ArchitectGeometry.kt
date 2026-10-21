@@ -15,6 +15,20 @@ data class PlanPoint(val x: Float, val y: Float) {
 
 data class PlanWall(val start: PlanPoint, val end: PlanPoint)
 
+/** Apertures are intentionally created and positioned by the user, without AI. */
+enum class OpeningType(val label: String) {
+    DOOR("Porta"), WINDOW("Janela")
+}
+
+data class PlanOpening(
+    val wallIndex: Int,
+    val type: OpeningType,
+    val centerFraction: Double,
+    val widthMeters: Double,
+    val sillMeters: Double,
+    val heightMeters: Double
+)
+
 data class PlanFloor(
     val title: String,
     val imageFile: String? = null,
@@ -24,7 +38,8 @@ data class PlanFloor(
     val referenceStart: PlanPoint? = null,
     val referenceEnd: PlanPoint? = null,
     val wallHeightMeters: Double = 2.7,
-    val walls: List<PlanWall> = emptyList()
+    val walls: List<PlanWall> = emptyList(),
+    val openings: List<PlanOpening> = emptyList()
 ) {
     val calibrated: Boolean get() = FloorPlanMath.pixelsPerMeter(this) != null
 }
@@ -58,6 +73,36 @@ object FloorPlanMath {
     fun totalWallMeters(floor: PlanFloor): Double? {
         if (!floor.calibrated) return null
         return floor.walls.sumOf { wallLengthMeters(floor, it) ?: 0.0 }
+    }
+
+    fun openingRange(floor: PlanFloor, opening: PlanOpening): ClosedFloatingPointRange<Double>? {
+        val wall = floor.walls.getOrNull(opening.wallIndex) ?: return null
+        val length = wallLengthMeters(floor, wall) ?: return null
+        if (!length.isFinite() || length <= 0.0 || !opening.centerFraction.isFinite() ||
+            !opening.widthMeters.isFinite() || opening.widthMeters <= 0.0 ||
+            opening.widthMeters >= length ||
+            opening.centerFraction !in 0.0..1.0 ||
+            !opening.sillMeters.isFinite() || opening.sillMeters < 0.0 ||
+            !opening.heightMeters.isFinite() || opening.heightMeters <= 0.0 ||
+            !floor.wallHeightMeters.isFinite() || floor.wallHeightMeters <= 0.0 ||
+            opening.sillMeters + opening.heightMeters > floor.wallHeightMeters + 1e-6
+        ) return null
+        if (opening.type == OpeningType.DOOR && opening.sillMeters > 1e-6) return null
+        val center = length * opening.centerFraction
+        val start = center - opening.widthMeters / 2
+        val end = center + opening.widthMeters / 2
+        if (start < -1e-6 || end > length + 1e-6) return null
+        return start.coerceAtLeast(0.0)..end.coerceAtMost(length)
+    }
+
+    /** Allow apertures on one wall only when their horizontal spans do not overlap. */
+    fun canAddOpening(floor: PlanFloor, opening: PlanOpening): Boolean {
+        val range = openingRange(floor, opening) ?: return false
+        return floor.openings.none { existing ->
+            if (existing.wallIndex != opening.wallIndex) return@none false
+            val other = openingRange(floor, existing) ?: return@none false
+            range.start < other.endInclusive - 1e-6 && other.start < range.endInclusive - 1e-6
+        }
     }
 
     /** Image normalized point into rough world x/y coordinates in meters. */
