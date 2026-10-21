@@ -21,7 +21,8 @@ class ArchitectPlanStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("architect_plan_v1", Context.MODE_PRIVATE)
     private val folder = File(context.filesDir, "architect").apply { mkdirs() }
 
-    fun load(): ArchitectPlan = try {
+    fun load(): ArchitectPlan {
+        return try {
         val raw = prefs.getString("plan", null) ?: return ArchitectPlan()
         val obj = JSONObject(raw)
         val items = obj.getJSONArray("floors")
@@ -47,8 +48,9 @@ class ArchitectPlanStore(private val context: Context) {
         if (floors.isEmpty()) ArchitectPlan() else ArchitectPlan(
             floors, obj.optInt("selected", 0).coerceIn(floors.indices)
         )
-    } catch (_: Exception) {
-        ArchitectPlan()
+        } catch (_: Exception) {
+            ArchitectPlan()
+        }
     }
 
     fun save(plan: ArchitectPlan) {
