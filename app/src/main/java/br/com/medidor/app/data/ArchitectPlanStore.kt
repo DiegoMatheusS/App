@@ -1,0 +1,114 @@
+package br.com.medidor.app.data
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.SystemClock
+import br.com.medidor.app.domain.ArchitectPlan
+import br.com.medidor.app.domain.PlanFloor
+import br.com.medidor.app.domain.PlanPoint
+import br.com.medidor.app.domain.PlanWall
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+
+/**
+ * Early local-only architect project storage. Each imported image is saved in
+ * app-private files, no external upload and no storage permission needed.
+ * JSON is intentionally versioned before eventual Room migration.
+ */
+class ArchitectPlanStore(private val context: Context) {
+    private val prefs = context.getSharedPreferences("architect_plan_v1", Context.MODE_PRIVATE)
+    private val folder = File(context.filesDir, "architect").apply { mkdirs() }
+
+    fun load(): ArchitectPlan {
+        return try {
+        val raw = prefs.getString("plan", null) ?: return ArchitectPlan()
+        val obj = JSONObject(raw)
+        val items = obj.getJSONArray("floors")
+        val floors = (0 until items.length()).map { i ->
+            val f = items.getJSONObject(i)
+            val wallsJson = f.optJSONArray("walls") ?: JSONArray()
+            val walls = (0 until wallsJson.length()).map { j ->
+                val wall = wallsJson.getJSONObject(j)
+                PlanWall(point(wall.getJSONObject("a"))!!, point(wall.getJSONObject("b"))!!)
+            }
+            PlanFloor(
+                title = f.optString("title", "Andar ${i + 1}"),
+                imageFile = f.optString("image").ifBlank { null },
+                imageWidth = f.optInt("width"),
+                imageHeight = f.optInt("height"),
+                knownMeters = f.optDouble("knownMeters", 4.0),
+                referenceStart = f.optJSONObject("refA")?.let(::point),
+                referenceEnd = f.optJSONObject("refB")?.let(::point),
+                wallHeightMeters = f.optDouble("wallHeightMeters", 2.7),
+                walls = walls
+            )
+        }
+        if (floors.isEmpty()) ArchitectPlan() else ArchitectPlan(
+            floors, obj.optInt("selected", 0).coerceIn(floors.indices)
+        )
+        } catch (_: Exception) {
+            ArchitectPlan()
+        }
+    }
+
+    fun save(plan: ArchitectPlan) {
+        require(plan.floors.isNotEmpty())
+        val obj = JSONObject().apply {
+            put("version", 1)
+            put("selected", plan.selectedFloor)
+            put("floors", JSONArray().also { arr ->
+                plan.floors.forEach { f ->
+                    arr.put(JSONObject().apply {
+                        put("title", f.title)
+                        put("image", f.imageFile ?: "")
+                        put("width", f.imageWidth)
+                        put("height", f.imageHeight)
+                        put("knownMeters", f.knownMeters)
+                        put("wallHeightMeters", f.wallHeightMeters)
+                        if (f.referenceStart != null) put("refA", pointJson(f.referenceStart))
+                        if (f.referenceEnd != null) put("refB", pointJson(f.referenceEnd))
+                        put("walls", JSONArray().also { walls ->
+                            f.walls.forEach { wall ->
+                                walls.put(JSONObject().apply {
+                                    put("a", pointJson(wall.start))
+                                    put("b", pointJson(wall.end))
+                                })
+                            }
+                        })
+                    })
+                }
+            })
+        }
+        check(prefs.edit().putString("plan", obj.toString()).commit()) {
+            "Não foi possível salvar o projeto localmente"
+        }
+    }
+
+    fun saveImage(bitmap: Bitmap): String {
+        // Unique file name; never overwrite a shared image used by a duplicated floor.
+        val fileName = "planta_${System.currentTimeMillis()}_${SystemClock.elapsedRealtimeNanos()}.jpg"
+        val file = File(folder, fileName)
+        file.outputStream().use {
+            check(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)) { "Falha ao salvar imagem" }
+        }
+        return fileName
+    }
+
+    fun readImage(fileName: String?): Bitmap? {
+        if (fileName == null || fileName != File(fileName).name) return null
+        val file = File(folder, fileName)
+        if (!file.isFile) return null
+        return BitmapFactory.decodeFile(file.absolutePath)
+    }
+
+    private fun pointJson(p: PlanPoint) = JSONObject().apply {
+        put("x", p.x.toDouble())
+        put("y", p.y.toDouble())
+    }
+
+    private fun point(p: JSONObject): PlanPoint? = try {
+        PlanPoint(p.getDouble("x").toFloat(), p.getDouble("y").toFloat())
+    } catch (_: Exception) { null }
+}

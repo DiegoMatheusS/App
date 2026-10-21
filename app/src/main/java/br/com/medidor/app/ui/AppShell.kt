@@ -70,11 +70,7 @@ fun AppShell() {
                     records = store.deleteAt(index)
                 })
                 Destination.PRO -> ProScreen()
-                Destination.ARCHITECT -> PlannedFeatureScreen(
-                    title = "Modo Arquiteto",
-                    description = "Leitura assistida de plantas, paredes 3D, maquete AR sobre o papel e vários andares.",
-                    stages = listOf("Importar planta e definir escala", "Marcar paredes e gerar maquete", "Ancorar com ARCore em aparelhos compatíveis", "Adicionar andares e cotas")
-                )
+                Destination.ARCHITECT -> ArchitectScreen()
                 Destination.SCANNER -> PlannedFeatureScreen(
                     title = "Scanner 3D completo",
                     description = "Captura por vários ângulos e reconstrução por fotogrametria, sem IA generativa.",

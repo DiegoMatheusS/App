@@ -39,7 +39,7 @@ fun HomeScreen(onOpen: (Destination) -> Unit) {
             onClick = { onOpen(Destination.HISTORY) })
         Spacer(Modifier.height(6.dp))
         Text("Próximos módulos", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        ToolCard("Modo Arquiteto", "Plantas 2D, 3D, vários andares e AR", "PLANEJADO · PRO",
+        ToolCard("Modo Arquiteto", "Importe plantas, marque paredes e veja a maquete esquemática", "PRÉVIA · PRO",
             onClick = { onOpen(Destination.ARCHITECT) })
         ToolCard("Scanner 3D completo", "Fotogrametria e visualização do modelo", "PLANEJADO · PRO",
             onClick = { onOpen(Destination.SCANNER) })
