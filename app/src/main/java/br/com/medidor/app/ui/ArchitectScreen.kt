@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -113,7 +112,8 @@ fun ArchitectScreen() {
                     imageHeight = photo.height,
                     referenceStart = null,
                     referenceEnd = null,
-                    walls = emptyList()
+                    walls = emptyList(),
+                    openings = emptyList()
                 ))
                 editingMode = "reference"
                 pending = null
@@ -130,7 +130,7 @@ fun ArchitectScreen() {
             text = { Text("A planta e a referência de escala serão mantidas.") },
             confirmButton = {
                 TextButton(onClick = {
-                    editFloor(current.copy(walls = emptyList()))
+                    editFloor(current.copy(walls = emptyList(), openings = emptyList()))
                     pending = null
                     confirmErase = false
                 }) { Text("Apagar paredes") }
@@ -257,7 +257,10 @@ fun ArchitectScreen() {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled = current.walls.isNotEmpty(), onClick = {
-                    editFloor(current.copy(walls = current.walls.dropLast(1)))
+                    editFloor(current.copy(
+                        walls = current.walls.dropLast(1),
+                        openings = current.openings.filter { it.wallIndex < current.walls.lastIndex }
+                    ))
                     pending = null
                 }) { Text("Desfazer parede") }
                 OutlinedButton(enabled = current.walls.isNotEmpty(), onClick = {
@@ -278,6 +281,7 @@ fun ArchitectScreen() {
                     editFloor(current.copy(wallHeightMeters = height))
                 } else error = "A altura deve estar entre 0 e 20 m."
             }) { Text("Aplicar altura") }
+            OpeningEditor(floor = current, onUpdate = { updated -> editFloor(updated) })
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = showLines, onClick = { showLines = !showLines },
                     label = { Text("Linhas") })
@@ -301,13 +305,13 @@ fun ArchitectScreen() {
         if (preview3D) {
             FilterChip(selected = showAllFloors, onClick = { showAllFloors = !showAllFloors },
                 label = { Text(if (showAllFloors) "Exibindo todos os andares" else "Somente este andar") })
-            IsometricFloorPreview(
+            OrbitModelPreview(
                 plan = project,
                 allFloors = showAllFloors,
                 showLines = showLines
             )
-            Text("Prévia isométrica simplificada das paredes marcadas; não é um scanner 3D, " +
-                "modelo CAD nem realidade aumentada. Portas, janelas e telhado ainda não são gerados.",
+            Text("Prévia tridimensional interativa das paredes marcadas com portas e janelas. " +
+                "Ainda não é um modelo CAD/BIM, scanner 3D ou realidade aumentada.",
                 style = MaterialTheme.typography.bodySmall)
         }
         if (showMeasurements && current.walls.isNotEmpty()) {
@@ -378,6 +382,20 @@ private fun FloorPlanCanvas(
                     drawLine(Color(0xFF14AD9C), center(wall.start), center(wall.end), 4.dp.toPx())
                 }
             }
+            if (showLines) {
+                floor.openings.forEach { opening ->
+                    val wall = floor.walls.getOrNull(opening.wallIndex) ?: return@forEach
+                    if (FloorPlanMath.openingRange(floor, opening) == null) return@forEach
+                    val x = wall.start.x + (wall.end.x - wall.start.x) * opening.centerFraction.toFloat()
+                    val y = wall.start.y + (wall.end.y - wall.start.y) * opening.centerFraction.toFloat()
+                    drawCircle(
+                        if (opening.type == br.com.medidor.app.domain.OpeningType.DOOR)
+                            Color(0xFFFF9800) else Color(0xFF7C4DFF),
+                        radius = 6.dp.toPx(),
+                        center = center(PlanPoint(x, y))
+                    )
+                }
+            }
             if (showMeasurements) {
                 drawIntoCanvas { surface ->
                     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -404,59 +422,3 @@ private fun FloorPlanCanvas(
     }
 }
 
-/** Schematic isometric projection of individually traced wall segments. */
-@Composable
-private fun IsometricFloorPreview(plan: ArchitectPlan, allFloors: Boolean, showLines: Boolean) {
-    Canvas(Modifier.fillMaxWidth().height(280.dp).background(Color(0xFFECF2F5))) {
-        data class Shape(val corners: List<Offset>, val floorIndex: Int)
-        fun project(x: Double, y: Double, z: Double) = Offset(
-            ((x - y) * 0.8).toFloat(),
-            ((x + y) * 0.42 - z).toFloat()
-        )
-        val shapes = mutableListOf<Shape>()
-        val floors = if (allFloors) plan.floors.withIndex().toList()
-            else listOf(plan.floors.withIndex().elementAt(plan.selectedFloor))
-        for ((index, floor) in floors) {
-            val baseHeight = if (allFloors) plan.floors.take(index).sumOf { it.wallHeightMeters } else 0.0
-            for (wall in floor.walls) {
-                val a = FloorPlanMath.worldPointMeters(floor, wall.start) ?: continue
-                val b = FloorPlanMath.worldPointMeters(floor, wall.end) ?: continue
-                shapes += Shape(listOf(
-                    project(a.first, a.second, baseHeight),
-                    project(b.first, b.second, baseHeight),
-                    project(b.first, b.second, baseHeight + floor.wallHeightMeters),
-                    project(a.first, a.second, baseHeight + floor.wallHeightMeters)
-                ), index)
-            }
-        }
-        val coords = shapes.flatMap { it.corners }
-        if (coords.isNotEmpty()) {
-            val lowX = coords.minOf { it.x }; val highX = coords.maxOf { it.x }
-            val lowY = coords.minOf { it.y }; val highY = coords.maxOf { it.y }
-            val ratio = min(
-                (size.width - 32.dp.toPx()) / (highX - lowX).coerceAtLeast(1f),
-                (size.height - 32.dp.toPx()) / (highY - lowY).coerceAtLeast(1f)
-            ).coerceAtMost(100f)
-            val dx = (size.width - (highX - lowX) * ratio) / 2
-            val dy = (size.height - (highY - lowY) * ratio) / 2
-            shapes.forEach { shape ->
-                val vertices = shape.corners.map { p ->
-                    Offset(dx + (p.x - lowX) * ratio, dy + (p.y - lowY) * ratio)
-                }
-                val polygon = Path().apply {
-                    moveTo(vertices.first().x, vertices.first().y)
-                    vertices.drop(1).forEach { lineTo(it.x, it.y) }
-                    close()
-                }
-                val fill = if (shape.floorIndex % 2 == 0) Color(0xFF3799A9) else Color(0xFF8BB5A4)
-                drawPath(polygon, fill.copy(alpha = 0.75f))
-                if (showLines) {
-                    drawLine(Color(0xFF234C59), vertices[0], vertices[1], 1.3.dp.toPx())
-                    drawLine(Color(0xFF234C59), vertices[2], vertices[3], 1.3.dp.toPx())
-                    drawLine(Color(0xFF234C59), vertices[0], vertices[3], 1.3.dp.toPx())
-                    drawLine(Color(0xFF234C59), vertices[1], vertices[2], 1.3.dp.toPx())
-                }
-            }
-        }
-    }
-}
