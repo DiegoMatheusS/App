@@ -29,7 +29,7 @@ class ScannerPhotoQualityTest {
     }
 
     @Test fun similarImagesAreFlaggedAsPossibleRepeats() {
-        val image = image { x, y -> gray(if (x < 40 + (y / 3)) 40 else 210) }
+        val image = image { x, y -> gray(if ((x / 4 + y / 7) % 2 == 0) 40 else 210) }
         val first = ScannerPhotoQuality.evaluate(image, size, size)
         val altered = image.copyOf().apply { this[20 * size + 20] = gray(55) }
         val second = ScannerPhotoQuality.evaluate(altered, size, size)
