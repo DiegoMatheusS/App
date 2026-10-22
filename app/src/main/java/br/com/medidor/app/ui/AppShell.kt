@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +45,9 @@ fun AppShell() {
     var destinationName by rememberSaveable { mutableStateOf(Destination.HOME.name) }
     val destination = Destination.entries.firstOrNull { it.name == destinationName } ?: Destination.HOME
     var records by remember { mutableStateOf(store.load()) }
+    LaunchedEffect(destination) {
+        if (destination == Destination.HISTORY) records = store.load()
+    }
     fun navigate(to: Destination) { destinationName = to.name }
     fun addRecord(title: String, details: String) { records = store.save(title, details) }
 

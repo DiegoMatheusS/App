@@ -31,7 +31,7 @@ No Android Studio: abrir a pasta do projeto, instalar Android SDK 37 e sincroniz
 ## Roadmap
 
 1. Melhorar foto calibrada: retificação de perspectiva, zoom de precisão, galeria de imagens associadas às medições.
-2. Migrar persistência protótipo para Room, backups de projetos, relatórios e testes instrumentados.
+2. Migrar persistência protótipo para Room, backups versionados robustos, relatórios PDF e testes instrumentados.
 3. Modo Arquiteto: melhorar escala/calibração entre plantas, edição detalhada de paredes/aberturas e validação física do ARCore.
 4. Scanner 3D por fotogrametria offline, com benchmarks de hardware.
 5. Detecção/contagem de tijolos com modelo de IA local opcional.
@@ -88,3 +88,12 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - Uma duplicação pode compartilhar referências às mesmas imagens privadas. A exclusão de um projeto **não apaga as imagens do armazenamento**, para evitar quebrar outro projeto que use a mesma foto. Limpeza de imagens órfãs exige migração futura mais cuidadosa.
 - Os projetos não possuem sincronização, login nem backup automático. Antes de dados críticos de produção, migrar para Room e implementar exportação/importação com verificação de integridade.
 - O zoom melhora a seleção manual, mas não aumenta a resolução original da foto nem torna medições geometricamente certificadas.
+
+## PR #10 — Backup e restauração local, exportação OBJ
+- **Backup manual por seletor de documentos do Android:** arquivo ZIP com até 20 projetos locais, suas plantas JPEG e histórico de medições (registro global).
+- **Restauração explícita:** seleciona ZIP, exibe confirmação clara de que os projetos e o histórico serão **substituídos**, verifica o conteúdo, hashes SHA-256, limites de tamanho e referências a fotografias antes de substituir dados.
+- Imagens restauradas recebem nomes privados novos, evitando sobreposição com fotos existentes. Um erro na validação deixa os projetos atuais inalterados; caso a gravação falhe, a rotina tenta reverter preferências e elimina novas imagens copiadas.
+- O ZIP não é criptografado; contém plantas possivelmente sensíveis. Guarde-o em local confiável. **Não existe backup automático ou sincronização em nuvem.**
+- **Exportar maquete 3D (.obj)**: modelo aproximado das paredes, portas e janelas marcadas manualmente, em metros, sem texturas nem BIM; pode ser aberto em aplicativos compatíveis com Wavefront OBJ.
+- Controles usam Android Storage Access Framework e não exigem acesso irrestrito a arquivos do aparelho.
+- Testes unitários de limites de arquivo, proteção contra caminhos inseguros e serialização da geometria OBJ. Testes físicos de restauração, conteúdo ZIP e abertura em visualizador 3D ainda são necessários.

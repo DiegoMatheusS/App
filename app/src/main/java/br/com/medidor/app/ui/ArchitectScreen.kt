@@ -233,6 +233,14 @@ fun ArchitectScreen() {
             },
             onError = { error = it }
         )
+        ArchitectBackupControls(onRestored = {
+            activeProjectId = manager.activeId()
+            project = repository.load()
+            pending = null
+            perspectiveCorners.clear()
+            editingMode = "reference"
+            error = null
+        })
         Text("Pavimentos", style = MaterialTheme.typography.titleMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             project.floors.forEachIndexed { index, f ->
