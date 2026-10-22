@@ -5,6 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import br.com.medidor.app.domain.ScannerCaptureGuide
 import br.com.medidor.app.domain.ScannerSessionArchive
+import br.com.medidor.app.domain.ScannerPhotoQuality
+import br.com.medidor.app.domain.ScannerPhotoCheck
+import br.com.medidor.app.domain.ScannerQualityReport
 import java.io.InputStream
 import java.io.OutputStream
 import org.json.JSONArray
@@ -183,6 +186,56 @@ class ScannerSessionStore(context: Context) {
         } finally {
             staging.deleteRecursively()
         }
+    }
+
+    /**
+     * Analyze small, bounded thumbnails sequentially; no original full-size
+     * bitmap is retained. This is a rough photo-quality check, not 3D solving.
+     */
+    fun analyzeSession(id: String): ScannerQualityReport {
+        val session = list().firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Sessão não encontrada.")
+        val checks = session.frames.toSortedMap().map { (slot, name) ->
+            val file = safeFile(name)
+            if (file == null || !file.isFile || file.length() !in 1..MAX_SHOT_BYTES) {
+                ScannerPhotoCheck(slot, null, listOf("Fotografia indisponível ou inválida"))
+            } else {
+                try {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, bounds)
+                    require(bounds.outWidth in 1..4096 && bounds.outHeight in 1..4096) {
+                        "Resolução inválida."
+                    }
+                    var sample = 1
+                    while (maxOf(bounds.outWidth / sample, bounds.outHeight / sample) > 192) {
+                        sample *= 2
+                    }
+                    val bitmap = BitmapFactory.decodeFile(file.absolutePath,
+                        BitmapFactory.Options().apply { inSampleSize = sample })
+                        ?: error("Erro ao carregar imagem.")
+                    val thumbnail = Bitmap.createScaledBitmap(
+                        bitmap, ScannerPhotoQuality.THUMB_SIZE,
+                        ScannerPhotoQuality.THUMB_SIZE, true
+                    )
+                    val pixels = IntArray(ScannerPhotoQuality.THUMB_SIZE * ScannerPhotoQuality.THUMB_SIZE)
+                    try {
+                        thumbnail.getPixels(pixels, 0, ScannerPhotoQuality.THUMB_SIZE,
+                            0, 0, ScannerPhotoQuality.THUMB_SIZE, ScannerPhotoQuality.THUMB_SIZE)
+                    } finally {
+                        if (thumbnail !== bitmap) thumbnail.recycle()
+                        bitmap.recycle()
+                    }
+                    val metrics = ScannerPhotoQuality.evaluate(
+                        pixels, ScannerPhotoQuality.THUMB_SIZE, ScannerPhotoQuality.THUMB_SIZE
+                    )
+                    ScannerPhotoCheck(slot, metrics, metrics.warnings())
+                } catch (e: Exception) {
+                    ScannerPhotoCheck(slot, null,
+                        listOf("Não foi possível analisar a foto: ${e.localizedMessage}"))
+                }
+            }
+        }
+        return ScannerPhotoQuality.summarize(checks)
     }
 
     fun thumbnail(fileName: String?): Bitmap? {

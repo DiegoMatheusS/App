@@ -41,6 +41,7 @@ import androidx.core.content.ContextCompat
 import br.com.medidor.app.data.ScannerSessionStore
 import br.com.medidor.app.domain.ScanPass
 import br.com.medidor.app.domain.ScannerCaptureGuide
+import br.com.medidor.app.domain.ScannerQualityReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -67,6 +68,8 @@ fun ScannerCaptureScreen() {
     var dialog by remember { mutableStateOf("") }
     var nameText by remember { mutableStateOf("") }
     var feedback by remember { mutableStateOf<String?>(null) }
+    var qualityReport by remember { mutableStateOf<ScannerQualityReport?>(null) }
+    var reportSessionId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     fun reload(id: String?) {
@@ -74,6 +77,8 @@ fun ScannerCaptureScreen() {
         activeId = id?.takeIf { requested -> sessions.any { it.id == requested } }
             ?: sessions.firstOrNull()?.id
         refresh++
+        qualityReport = null
+        reportSessionId = null
     }
 
     fun saveShot(bitmap: Bitmap, sessionId: String, slot: Int) {
@@ -266,6 +271,8 @@ fun ScannerCaptureScreen() {
                         position = ScannerCaptureGuide.nextMissing(session.frames.keys) ?: 0
                         showCamera = false
                         feedback = null
+                        qualityReport = null
+                        reportSessionId = null
                     },
                     label = { Text("${session.name} (${session.capturedCount}/20)") }
                 )
@@ -324,6 +331,59 @@ fun ScannerCaptureScreen() {
                 Text("As 20 posições sugeridas foram fotografadas. " +
                     "Os arquivos estão salvos, mas a reconstrução do modelo 3D ainda não está implementada.",
                     color = MaterialTheme.colorScheme.primary)
+            }
+            OutlinedButton(enabled = !busy && !showCamera && active.frames.isNotEmpty(),
+                onClick = {
+                    val requestedId = active.id
+                    scope.launch {
+                        busy = true
+                        try {
+                            val result = withContext(Dispatchers.Default) {
+                                store.analyzeSession(requestedId)
+                            }
+                            if (activeId == requestedId) {
+                                qualityReport = result
+                                reportSessionId = requestedId
+                                feedback = "Análise local finalizada. Revise os avisos antes de fotografar novamente."
+                            }
+                        } catch (e: Exception) {
+                            feedback = "Não foi possível analisar as fotos: ${e.localizedMessage}"
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            ) { Text("Analisar qualidade das fotos (offline)") }
+            if (qualityReport != null && reportSessionId == active.id) {
+                val report = qualityReport!!
+                Text("Pré-análise das imagens", style = MaterialTheme.typography.titleMedium)
+                Text("Fotos: ${report.checks.size}/20 • alertas: ${report.warningsCount} • " +
+                    "posições ausentes: ${report.missingSlots.size}")
+                if (report.warningsCount == 0) {
+                    Text("Nenhum alerta heurístico nesta amostra. Isso NÃO comprova " +
+                        "qualidade para reconstrução ou cobertura de todos os ângulos.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                report.checks.filter { it.warnings.isNotEmpty() }.forEach { check ->
+                    Text("Foto ${check.slot + 1}: ${check.warnings.joinToString("; ")}",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                if (report.similarPairs.isNotEmpty()) {
+                    Text("Possíveis imagens muito parecidas (sem comprovação de repetição): " +
+                        report.similarPairs.take(8).joinToString("; ") {
+                            "${it.first + 1} e ${it.second + 1}"
+                        } + if (report.similarPairs.size > 8) "…" else "",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                if (report.missingSlots.isNotEmpty()) {
+                    Text("Posições pendentes: " + report.missingSlots.joinToString(", ") { "${it + 1}" },
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                Text("O algoritmo verifica exposição, detalhes visuais e semelhança aproximada " +
+                    "entre fotos reduzidas. Não identifica poses, pontos 3D, sobreposição " +
+                    "geométrica nem garante fotogrametria.",
+                    style = MaterialTheme.typography.bodySmall)
             }
             Text("Selecione a posição da fotografia:", fontWeight = FontWeight.SemiBold)
             for (pass in ScanPass.entries) {
@@ -391,7 +451,7 @@ fun ScannerCaptureScreen() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error)
         }
-        if (busy) Text("Salvando fotografia…")
+        if (busy) Text("Processando fotografias no aparelho…")
         feedback?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
     }
 }

@@ -122,3 +122,12 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - O formato ZIP é **não criptografado** e pode conter imagens de locais ou objetos privados. Armazene as cópias de forma segura.
 - Testes unitários exercitam exportação, importação, integridade das fotos, pacote vazio, conteúdo malicioso, manifesto ausente e adulteração de imagens.
 - Testes instrumentados de restauração no Android continuam necessários para certificar a preservação de arquivos em falhas de armazenamento.
+
+## Scanner 3D — pré-análise de imagens offline (PR #14)
+- Botão **Analisar qualidade das fotos (offline)**: avalia as fotos da sessão atual sem rede nem APIs externas. Trabalha sequencialmente com miniaturas 96×96 para limitar RAM e processamento.
+- Gera avisos individuais por foto sobre **exposição muito baixa/alta** e **poucos detalhes visuais** (energia média de gradientes como aproximação do contraste/foco).
+- Sinaliza **pares possivelmente muito semelhantes** usando hash perceptual simples (dHash). A indicação é apenas uma heurística: fotos de lados diferentes de objetos homogêneos podem parecer iguais, e fotos repetidas com iluminação diferente podem não ser detectadas.
+- Mostra a contagem de posições ainda não fotografadas. O relatório é atualizado sob demanda; trocar, excluir ou salvar fotos invalida uma análise anterior.
+- **Atenção:** isto NÃO extrai correspondências entre imagens, não estima movimento da câmera, profundidade nem calcula nuvem de pontos/malha 3D. A aprovação de uma foto nessa pré-análise também não garante que a reconstrução será possível.
+- Testes JVM verificam detecção de imagens escuras/claras, falta de contraste, energia de contornos, identificação aproximada de imagens parecidas, validação de entrada e posições ausentes.
+- Ainda são necessários testes de processamento no aparelho físico, incluindo consumo de memória com as 20 imagens e fotos difíceis (espelhos, superfícies transparentes e fundos repetitivos).
