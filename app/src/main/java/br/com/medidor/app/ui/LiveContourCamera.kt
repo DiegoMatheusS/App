@@ -1,6 +1,6 @@
 package br.com.medidor.app.ui
 
-import android.content.Context
+import android.view.View
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
@@ -9,6 +9,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
@@ -40,13 +41,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import br.com.medidor.app.domain.LiveContourTracking
+import br.com.medidor.app.domain.LiveViewportMapping
 import br.com.medidor.app.domain.NormalizedPoint
 import br.com.medidor.app.domain.PlanarContourResult
 import br.com.medidor.app.domain.PlanarContourSegmentation
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.min
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 private data class ContourOverlay(
     val width: Int,
@@ -73,83 +76,133 @@ internal fun LiveContourCamera(
     val worker = remember { Executors.newSingleThreadExecutor() }
     val selected = remember { AtomicReference<NormalizedPoint?>(null) }
     val previous = remember { AtomicReference<PlanarContourResult?>(null) }
+    val selectionGeneration = remember { AtomicInteger(0) }
     var overlay by remember { mutableStateOf<ContourOverlay?>(null) }
     var capture by remember { mutableStateOf<ImageCapture?>(null) }
     var tolerance by remember { mutableStateOf(32) }
     val threshold = remember { java.util.concurrent.atomic.AtomicInteger(32) }
     val previewView = remember(context) {
-        PreviewView(context).apply { scaleType=PreviewView.ScaleType.FIT_CENTER }
+        PreviewView(context).apply { scaleType=PreviewView.ScaleType.FILL_CENTER }
     }
 
     DisposableEffect(owner, previewView) {
-        var disposed = false
+        val disposed = AtomicBoolean(false)
         var boundProvider: ProcessCameraProvider? = null
-        if (owner != null) {
-            val future = ProcessCameraProvider.getInstance(context)
-            future.addListener({
-                if (!disposed) try {
-                    val provider = future.get()
-                    val preview = Preview.Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                        .build().apply { setSurfaceProvider(previewView.surfaceProvider) }
-                    val imageCapture = ImageCapture.Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                        .build()
-                    val analysis = ImageAnalysis.Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-                    var lastFrame = 0L
-                    analysis.setAnalyzer(worker) { proxy ->
-                        try {
-                            val now = SystemClock.elapsedRealtime()
-                            if (now - lastFrame >= 250) {
-                                lastFrame = now
-                                val sampled = LiveCameraFrameSampler.sample(proxy)
-                                if (sampled != null) {
-                                    val point = selected.get()
-                                    val detected = if (point != null)
-                                        PlanarContourSegmentation.segment(
-                                            sampled.pixels, sampled.width, sampled.height,
-                                            (point.x*(sampled.width-1)).toInt()
-                                                .coerceIn(0,sampled.width-1),
-                                            (point.y*(sampled.height-1)).toInt()
-                                                .coerceIn(0,sampled.height-1),
-                                            threshold.get()
-                                        )
-                                    else null
-                                    val checked = if (point != null)
-                                        LiveContourTracking.check(previous.get(),detected)
-                                    else null
-                                    previous.set(checked?.result)
-                                    val frame = ContourOverlay(sampled.width,sampled.height,
-                                        checked?.result,checked?.label
-                                            ?: "Toque no objeto para tentar isolar o contorno.")
-                                    if (!disposed) mainExecutor.execute {
-                                        if (!disposed) overlay = frame
+        var providerReady: ProcessCameraProvider? = null
+        val future = if (owner != null) ProcessCameraProvider.getInstance(context) else null
+
+        // PreviewView gets a valid ViewPort only after it has been laid out.
+        // Share that ViewPort across preview, image analysis, and photo capture:
+        // their crop rectangles then describe the same part of the sensor.
+        fun bindWhenReady() {
+            val provider = providerReady ?: return
+            val viewPort = previewView.viewPort ?: return
+            if (disposed.get() || boundProvider != null || owner == null) return
+            try {
+                val preview = Preview.Builder().build().apply {
+                    setSurfaceProvider(previewView.surfaceProvider)
+                }
+                val imageCapture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+                val analysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                var lastFrame = 0L
+                analysis.setAnalyzer(worker) { proxy ->
+                    try {
+                        val now = SystemClock.elapsedRealtime()
+                        if (!disposed.get() && now - lastFrame >= 250) {
+                            lastFrame = now
+                            val frame = LiveCameraFrameSampler.sample(proxy)
+                            if (frame != null) {
+                                val generation = selectionGeneration.get()
+                                val point = selected.get()
+                                val before = previous.get()
+                                val detected = if (point != null)
+                                    PlanarContourSegmentation.segment(
+                                        frame.pixels,frame.width,frame.height,
+                                        (point.x * (frame.width-1)).toInt()
+                                            .coerceIn(0,frame.width-1),
+                                        (point.y * (frame.height-1)).toInt()
+                                            .coerceIn(0,frame.height-1),
+                                        threshold.get()
+                                    ) else null
+                                val checked = if (point == null) null else
+                                    LiveContourTracking.check(before,detected)
+                                if (generation == selectionGeneration.get()) {
+                                    val nextContour = checked?.result
+                                    if (point != null && nextContour == null) {
+                                        // Do not keep searching the old location
+                                        // after a failed or unstable segmentation.
+                                        selected.set(null)
+                                    } else if (point != null && before != null &&
+                                        nextContour != null) {
+                                        LiveContourTracking.followSeed(before,nextContour,point)
+                                            ?.let { selected.set(it) }
+                                    }
+                                    previous.set(nextContour)
+                                    val output = ContourOverlay(frame.width,frame.height,
+                                        nextContour,checked?.label
+                                            ?: "Toque no objeto para selecionar o contorno.")
+                                    mainExecutor.execute {
+                                        if (!disposed.get() &&
+                                            generation == selectionGeneration.get()) {
+                                            overlay = output
+                                        }
                                     }
                                 }
                             }
-                        } catch (e: Exception) {
-                            if (!disposed) mainExecutor.execute {
-                                if (!disposed) latestError(
-                                    e.localizedMessage ?: "Falha ao analisar os quadros.")
+                        }
+                    } catch (_: Exception) {
+                        if (!disposed.get()) mainExecutor.execute {
+                            if (!disposed.get()) {
+                                overlay = ContourOverlay(1,1,null,
+                                    "Falha no quadro; toque novamente para selecionar.")
+                                selected.set(null)
+                                previous.set(null)
                             }
-                        } finally { proxy.close() }
+                        }
+                    } finally {
+                        proxy.close()
                     }
-                    provider.unbindAll()
-                    provider.bindToLifecycle(owner,CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview,imageCapture,analysis)
-                    boundProvider = provider
-                    capture = imageCapture
+                }
+                val group = UseCaseGroup.Builder()
+                    .addUseCase(preview)
+                    .addUseCase(imageCapture)
+                    .addUseCase(analysis)
+                    .setViewPort(viewPort)
+                    .build()
+                provider.unbindAll()
+                provider.bindToLifecycle(owner,CameraSelector.DEFAULT_BACK_CAMERA,group)
+                boundProvider = provider
+                capture = imageCapture
+            } catch (e: Exception) {
+                latestError(e.localizedMessage ?: "Falha ao iniciar câmera com análise.")
+            }
+        }
+
+        val onLayout = View.OnLayoutChangeListener {
+                _: View, _: Int, _: Int, _: Int, _: Int,
+                _: Int, _: Int, _: Int, _: Int ->
+            bindWhenReady()
+        }
+        previewView.addOnLayoutChangeListener(onLayout)
+        if (future != null) {
+            future.addListener({
+                if (!disposed.get()) try {
+                    providerReady = future.get()
+                    bindWhenReady()
                 } catch (e: Exception) {
-                    latestError(e.localizedMessage ?: "Não foi possível iniciar a câmera.")
+                    latestError(e.localizedMessage ?: "Não foi possível abrir a câmera.")
                 }
             },mainExecutor)
-        } else latestError("A câmera exige uma Activity Android compatível.")
+        } else {
+            latestError("A câmera exige uma Activity Android compatível.")
+        }
         onDispose {
-            disposed = true
+            disposed.set(true)
+            previewView.removeOnLayoutChangeListener(onLayout)
             boundProvider?.unbindAll()
             worker.shutdown()
             capture = null
@@ -167,36 +220,32 @@ internal fun LiveContourCamera(
             AndroidView(factory = { previewView },modifier = Modifier.fillMaxSize())
             Canvas(Modifier.fillMaxSize().pointerInput(overlay?.width,overlay?.height) {
                 detectTapGestures { touch ->
-                    val frame = overlay
-                    if (frame != null) {
-                        val point = liveTouchPoint(touch,size.width.toFloat(),
-                            size.height.toFloat(),frame.width,frame.height)
-                        if (point != null) {
-                            selected.set(point)
-                            previous.set(null)
-                            overlay = frame.copy(contour = null,
-                                message = "Buscando contorno no ponto selecionado…")
-                        }
+                    val normalized = LiveViewportMapping.point(touch.x,touch.y,
+                        size.width.toFloat(),size.height.toFloat())
+                    if (normalized != null) {
+                        selectionGeneration.incrementAndGet()
+                        selected.set(NormalizedPoint(normalized.first,normalized.second))
+                        previous.set(null)
+                        overlay = overlay?.copy(contour = null,
+                            message = "Buscando contorno no ponto selecionado…")
                     }
                 }
             }) {
                 val frame = overlay ?: return@Canvas
-                val box = liveImageBox(size.width.toFloat(),size.height.toFloat(),
-                    frame.width,frame.height)
                 val c = frame.contour ?: return@Canvas
                 val color = Color(0xFF44E8B5)
-                val top = box.top + box.height*c.minY/c.height
-                val bottom = box.top + box.height*(c.maxY+1)/c.height
-                val left = box.left + box.width*c.minX/c.width
-                val right = box.left + box.width*(c.maxX+1)/c.width
+                val top = size.height*c.minY.toFloat()/c.height
+                val bottom = size.height*(c.maxY+1f)/c.height
+                val left = size.width*c.minX.toFloat()/c.width
+                val right = size.width*(c.maxX+1f)/c.width
                 drawLine(color,Offset(left,top),Offset(right,top),3.dp.toPx())
                 drawLine(color,Offset(right,top),Offset(right,bottom),3.dp.toPx())
                 drawLine(color,Offset(right,bottom),Offset(left,bottom),3.dp.toPx())
                 drawLine(color,Offset(left,bottom),Offset(left,top),3.dp.toPx())
                 c.outline.forEach { p ->
                     drawCircle(color,1.1.dp.toPx(),
-                        Offset(box.left+box.width*(p.x.toFloat()/c.width),
-                            box.top+box.height*(p.y.toFloat()/c.height)))
+                        Offset(size.width*(p.x.toFloat()/c.width),
+                            size.height*(p.y.toFloat()/c.height)))
                 }
             }
         }
@@ -214,6 +263,9 @@ internal fun LiveContourCamera(
                     tolerance = choice
                     threshold.set(choice)
                     previous.set(null)
+                    selectionGeneration.incrementAndGet()
+                    overlay = overlay?.copy(contour = null,
+                        message = "Ajustando tolerância de contorno…")
                 },enabled = tolerance != choice) {
                     Text(when(choice) {
                         18 -> "Restrito"
@@ -247,27 +299,9 @@ internal fun LiveContourCamera(
         Text("A seleção ao vivo NÃO mede distância, profundidade nem identifica " +
             "automaticamente o objeto. Para estimar centímetros, capture uma foto " +
             "e calibre uma referência física no mesmo plano. O contorno da câmera " +
-            "pode não coincidir exatamente com o desenho sobreposto.",
+            "depende do recorte e rotação da câmera; verifique o alinhamento.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-private data class PreviewBounds(val left:Float,val top:Float,val width:Float,val height:Float)
-
-private fun liveImageBox(viewWidth:Float,viewHeight:Float,imageWidth:Int,imageHeight:Int):PreviewBounds {
-    val ratio = min(viewWidth/imageWidth,viewHeight/imageHeight)
-    val width = imageWidth*ratio
-    val height = imageHeight*ratio
-    return PreviewBounds((viewWidth-width)/2,(viewHeight-height)/2,width,height)
-}
-
-private fun liveTouchPoint(
-    touch:Offset,viewWidth:Float,viewHeight:Float,imageWidth:Int,imageHeight:Int
-):NormalizedPoint? {
-    val rect=liveImageBox(viewWidth,viewHeight,imageWidth,imageHeight)
-    if (rect.width<=0 || rect.height<=0) return null
-    val x=(touch.x-rect.left)/rect.width
-    val y=(touch.y-rect.top)/rect.height
-    return if(x in 0f..1f && y in 0f..1f) NormalizedPoint(x,y) else null
-}
