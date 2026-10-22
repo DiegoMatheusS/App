@@ -49,6 +49,7 @@ internal class ArchitectArRenderer(
     private val tap = AtomicReference<Pair<Float, Float>?>(null)
     @Volatile private var clearRequested = false
     private var anchor: Anchor? = null
+    private var trackedImage: AugmentedImage? = null
     private var texture = 0
     private var backgroundProgram = 0
     private var modelProgram = 0
@@ -57,6 +58,20 @@ internal class ArchitectArRenderer(
 
     private val quad = floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)
     private val uv = FloatArray(8)
+    private val quadBuffer by lazy { floatBuffer(quad) }
+    private val uvBuffer by lazy { floatBuffer(uv) }
+    // Cache geometry buffers to reduce allocations and stalls during navigation.
+    private val wallBuffers: List<FloatBuffer> by lazy {
+        faces.map { face ->
+            floatBuffer(FloatArray(face.corners.size * 3).also { verts ->
+                face.corners.forEachIndexed { i, p ->
+                    verts[i * 3] = p.x.toFloat()
+                    verts[i * 3 + 1] = p.z.toFloat()
+                    verts[i * 3 + 2] = (-p.y).toFloat()
+                }
+            })
+        }
+    }
     private val projection = FloatArray(16)
     private val view = FloatArray(16)
     private val model = FloatArray(16)
@@ -133,8 +148,9 @@ internal class ArchitectArRenderer(
             val frame = s.update()
             drawBackground(frame)
             if (clearRequested) {
-                anchor?.detach()
+                try { anchor?.detach() } catch (_: Exception) { }
                 anchor = null
+                trackedImage = null
                 clearRequested = false
             }
             val camera = frame.camera
@@ -143,16 +159,44 @@ internal class ArchitectArRenderer(
                 return
             }
             if (mode == ArchitectArActivity.MODE_PAPER) {
-                if (anchor == null) {
-                    val image = frame.getUpdatedTrackables(AugmentedImage::class.java).firstOrNull {
-                        it.trackingState == TrackingState.TRACKING &&
+                // getUpdatedTrackables contains updates, not every tracked frame.
+                // Keep the image and inspect its live tracking state each frame.
+                val newlyVisible = frame.getUpdatedTrackables(AugmentedImage::class.java)
+                    .firstOrNull {
+                        it.index == 0 && it.trackingState == TrackingState.TRACKING &&
                             it.trackingMethod == AugmentedImage.TrackingMethod.FULL_TRACKING
                     }
-                    if (image != null) {
-                        anchor = image.createAnchor(image.centerPose)
-                        status("Planta reconhecida! Caminhe ao redor para ver a maquete.")
-                    } else {
-                        status("Aponte para a planta impressa. Evite brilho e sombras fortes.")
+                if (newlyVisible != null && (trackedImage == null || anchor == null)) {
+                    try { anchor?.detach() } catch (_: Exception) { }
+                    anchor = newlyVisible.createAnchor(newlyVisible.centerPose)
+                    trackedImage = newlyVisible
+                }
+                val image = trackedImage
+                when {
+                    image == null -> {
+                        status("Enquadre a folha impressa (pelo menos 25% da imagem da câmera).")
+                        return
+                    }
+                    image.trackingState == TrackingState.STOPPED -> {
+                        try { anchor?.detach() } catch (_: Exception) { }
+                        anchor = null
+                        trackedImage = null
+                        status("Referência perdida. Aponte novamente para a folha.")
+                        return
+                    }
+                    image.trackingState != TrackingState.TRACKING -> {
+                        status("Rastreamento pausado. Mova devagar até recuperar a planta.")
+                        return
+                    }
+                    image.trackingMethod == AugmentedImage.TrackingMethod.LAST_KNOWN_POSE -> {
+                        status("Folha fora da câmera: última posição estimada. Não mova o papel.")
+                    }
+                    image.trackingMethod == AugmentedImage.TrackingMethod.FULL_TRACKING -> {
+                        status("Planta reconhecida e rastreada visualmente.")
+                    }
+                    else -> {
+                        status("Rastreamento visual perdido. Reenquadre a folha.")
+                        return
                     }
                 }
             } else {
@@ -203,8 +247,12 @@ internal class ArchitectArRenderer(
         val coordinate = GLES20.glGetAttribLocation(backgroundProgram, "aTexCoord")
         GLES20.glEnableVertexAttribArray(position)
         GLES20.glEnableVertexAttribArray(coordinate)
-        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, floatBuffer(quad))
-        GLES20.glVertexAttribPointer(coordinate, 2, GLES20.GL_FLOAT, false, 0, floatBuffer(uv))
+        quadBuffer.position(0)
+        uvBuffer.clear()
+        uvBuffer.put(uv)
+        uvBuffer.position(0)
+        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, quadBuffer)
+        GLES20.glVertexAttribPointer(coordinate, 2, GLES20.GL_FLOAT, false, 0, uvBuffer)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glDisableVertexAttribArray(position)
         GLES20.glDisableVertexAttribArray(coordinate)
@@ -214,23 +262,20 @@ internal class ArchitectArRenderer(
 
     private fun drawWalls(mvpMatrix: FloatArray, scale: Float) {
         GLES20.glUseProgram(modelProgram)
+        val scaled = mvpMatrix.copyOf()
+        Matrix.scaleM(scaled, 0, scale, scale, scale)
         GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(modelProgram, "uMvp"),
-            1, false, mvpMatrix, 0)
+            1, false, scaled, 0)
         val position = GLES20.glGetAttribLocation(modelProgram, "aPosition")
         val colorLocation = GLES20.glGetUniformLocation(modelProgram, "uColor")
         GLES20.glEnableVertexAttribArray(position)
         GLES20.glDisable(GLES20.GL_CULL_FACE)
-        for (face in faces) {
-            val verts = FloatArray(face.corners.size * 3)
-            face.corners.forEachIndexed { i, p ->
-                // ARCore's horizontal/image plane uses X,Z; vertical Y is up.
-                verts[i * 3] = (p.x * scale).toFloat()
-                verts[i * 3 + 1] = (p.z * scale).toFloat()
-                verts[i * 3 + 2] = (-p.y * scale).toFloat()
-            }
+        faces.forEachIndexed { index, face ->
+            val verts = wallBuffers[index]
+            verts.position(0)
             val faceColor = face.shade.coerceIn(0, 5) * 4
             GLES20.glUniform4fv(colorLocation, 1, colors, faceColor)
-            GLES20.glVertexAttribPointer(position, 3, GLES20.GL_FLOAT, false, 0, floatBuffer(verts))
+            GLES20.glVertexAttribPointer(position, 3, GLES20.GL_FLOAT, false, 0, verts)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_FAN, 0, face.corners.size)
         }
         GLES20.glDisableVertexAttribArray(position)

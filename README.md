@@ -55,3 +55,10 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - Em ambos os casos é preciso aparelho compatível com ARCore e Serviços do Google Play para RA disponíveis. O modo manual permanece utilizável nos demais aparelhos.
 - Renderização local via OpenGL ES 2.0; não há login, API de IA ou upload. Sem sensores compatíveis ou câmera disponível o app deve exibir uma explicação.
 - Estado **experimental**: integração depende de validação física da âncora, orientação da maquete, conforto de zoom e estabilidade do rastreamento.
+
+## Alinhamento manual e estabilidade AR (evolução)
+- Cada pavimento após o térreo aceita deslocamentos X/Y em metros (de -20 a 20), usados tanto na maquete 3D quanto no AR. O térreo fica como referência; escala/rotação/identificação de pilares ou escadas **não são automaticamente reconciliadas**.
+- O projeto local salva esses deslocamentos e continua lendo projetos anteriores (valores antigos assumem 0,0).
+- O AR sobre o papel agora distingue rastreamento visual direto, última posição estimada quando o papel sai da câmera, rastreamento pausado e referência perdida. Para melhores resultados, a folha deve permanecer fixa, plana, bem iluminada e ocupar pelo menos 25% do enquadramento inicialmente.
+- Aviso de imagem com poucos detalhes e mensagem específica quando o ARCore rejeitar a imagem. Esse aviso é apenas heurístico; aprovação visual e precisão permanecem dependentes do ARCore e de testes físicos.
+- A renderização da maquete reutiliza buffers geométricos, reduzindo alocações repetidas durante a navegação.

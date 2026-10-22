@@ -82,6 +82,8 @@ fun ArchitectScreen() {
     val current = project.floors[selected]
     var referenceText by remember(selected) { mutableStateOf(current.knownMeters.toString()) }
     var wallHeightText by remember(selected) { mutableStateOf(current.wallHeightMeters.toString()) }
+    var offsetXText by remember(selected) { mutableStateOf(current.offsetXMeters.toString()) }
+    var offsetYText by remember(selected) { mutableStateOf(current.offsetYMeters.toString()) }
 
     fun persist(next: ArchitectPlan) {
         try {
@@ -181,9 +183,45 @@ fun ArchitectScreen() {
                 editingMode = "walls"
             }) { Text("Duplicar") }
         }
-        Text("Cada pavimento pode ter sua própria planta e escala. O alinhamento entre pavimentos " +
-            "na prévia é esquemático; escadas e deslocamentos ainda não são modelados.",
+        Text("Alinhamento dos pavimentos: ajuste o deslocamento em metros. " +
+            "Use o térreo como referência (0,0); as posições seguem o desenho da planta.",
             style = MaterialTheme.typography.bodySmall)
+        if (selected > 0) {
+            Text("Posição horizontal do pavimento", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(
+                value = offsetXText,
+                onValueChange = { offsetXText = it },
+                label = { Text("Deslocamento X (m): positivo à direita") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            )
+            OutlinedTextField(
+                value = offsetYText,
+                onValueChange = { offsetYText = it },
+                label = { Text("Deslocamento Y (m): positivo para baixo na planta") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    val x = offsetXText.trim().replace(',', '.').toDoubleOrNull()
+                    val y = offsetYText.trim().replace(',', '.').toDoubleOrNull()
+                    if (x != null && y != null && x.isFinite() && y.isFinite() &&
+                        x in -20.0..20.0 && y in -20.0..20.0) {
+                        editFloor(current.copy(offsetXMeters = x, offsetYMeters = y))
+                    } else {
+                        error = "Informe deslocamentos entre -20 e 20 metros."
+                    }
+                }) { Text("Aplicar posição") }
+                OutlinedButton(onClick = {
+                    offsetXText = "0"
+                    offsetYText = "0"
+                    editFloor(current.copy(offsetXMeters = 0.0, offsetYMeters = 0.0))
+                }) { Text("Centralizar") }
+            }
+        }
 
         OutlinedButton(onClick = { openImage.launch("image/*") }) {
             Text(if (current.imageFile == null) "Importar planta (imagem)" else "Trocar planta deste andar")
