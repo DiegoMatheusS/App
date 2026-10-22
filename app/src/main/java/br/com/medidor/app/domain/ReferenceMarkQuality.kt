@@ -7,6 +7,11 @@ package br.com.medidor.app.domain
 object ReferenceMarkQuality {
     const val MIN_REFERENCE_PIXELS = 20.0
 
+    const val RECOMMENDED_REFERENCE_PIXELS = 50.0
+
+    fun needsLargerReference(spanPixels: Double): Boolean =
+        isReadable(spanPixels) && spanPixels < RECOMMENDED_REFERENCE_PIXELS
+
     fun isReadable(spanPixels: Double): Boolean =
         spanPixels.isFinite() && spanPixels >= MIN_REFERENCE_PIXELS
 }
