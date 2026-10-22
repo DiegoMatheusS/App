@@ -9,7 +9,7 @@ Primeira entrega do app de medições, em **Kotlin + Jetpack Compose**. Android 
 - Cálculo de tanques cilíndricos verticais/horizontais e esféricos, com nível de líquido, capacidade total e livre.
 - Foto capturada via CameraX **ou importada da galeria**; calibração por moeda ou distância conhecida (mm/cm/m), quatro pontos no **mesmo plano**, com opção de desfazer marcações.
 - Histórico local de resultados, exclusão individual com confirmação e compartilhamento como relatório de texto.
-- **Modo Arquiteto (prévia sem IA):** importar imagem da planta, definir escala por dois pontos de referência conhecida, marcar paredes, exibir/ocultar linhas e cotas, informar pé-direito, salvar localmente, adicionar até seis pavimentos e duplicar o pavimento atual. Inclui **maquete geométrica 3D interativa**, com rotação por toque, zoom por gesto, portas/janelas dimensionadas manualmente e separação de pavimentos. **Ainda não é AR, CAD ou BIM.**
+- **Modo Arquiteto (prévia sem IA):** importar imagem da planta, definir escala por dois pontos de referência conhecida, marcar paredes, exibir/ocultar linhas e cotas, informar pé-direito, salvar localmente, adicionar até seis pavimentos e duplicar o pavimento atual. Inclui **maquete geométrica 3D interativa**, com rotação por toque, zoom por gesto, portas/janelas dimensionadas manualmente e separação de pavimentos. **Não é CAD ou BIM.** Há agora um modo AR experimental em dispositivos compatíveis.
 - Tela informativa Pro completo (preço de referência **R$ 129,90**, pagamento único). **Não há compra habilitada nem desbloqueio falso.**
 - Testes unitários para cálculos e calibração.
 
@@ -23,7 +23,7 @@ No Android Studio: abrir a pasta do projeto, instalar Android SDK 37 e sincroniz
 
 - Medidas da câmera são **estimativas planas**, com pontos escolhidos manualmente e referência física no mesmo plano. Não medem profundidade ou diâmetro de tanques distantes.
 - Os tanques são sólidos geométricos ideais; não contabilizam deformações, teto/fundo complexo, internos nem volume morto. Não substituem arqueação/certificação.
-- A leitura **automática** de plantas, modelagem CAD/BIM, ancoragem ARCore, scanner 3D, detecção de tijolos por IA, Room e Play Billing ainda **não estão implementados**; ficam para etapas seguintes.
+- A leitura **automática** de plantas, modelagem CAD/BIM, alinhamento estrutural certificado de pavimentos, scanner 3D, detecção de tijolos por IA, Room e Play Billing ainda **não estão implementados**; ficam para etapas seguintes.
 - Calibração por moeda usa diâmetros da **segunda família do Real**.
 - Dados locais são protótipo; migração para Room antes de uso em produção.
 - A primeira entrega não foi validada fisicamente em aparelho.
@@ -47,3 +47,11 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - A prévia renderiza paredes com espessura ilustrativa de 14 cm; isso **não é uma medição real da espessura**.
 - Os pavimentos são centrados individualmente, portanto o encaixe entre desenhos distintos é apenas aproximado até implementarmos alinhamento por referências.
 - Há testes unitários das aberturas, áreas de superfície e conversões; ainda é necessária validação visual em aparelho real.
+
+## AR experimental (ARCore, sem IA generativa)
+- `AR na mesa`: toca uma superfície horizontal reconhecida e posiciona a maquete; os botões permitem mudar o tamanho e reposicionar. Escala **de apresentação**, não 1:1.
+- `AR sobre papel`: importa a mesma planta que foi impressa, informa sua **largura física em centímetros** e tenta reconhecer a imagem com ARCore Augmented Images. Ao reconhecer, cria uma âncora na folha e miniaturiza o modelo conforme o tamanho impresso.
+- A imagem deve ter detalhes visuais distintos; uma planta de linhas muito uniformes pode não ser detectável. Papel fixo e iluminado funciona melhor. Não trata documento PDF diretamente, nem detecta qualquer planta automaticamente.
+- Em ambos os casos é preciso aparelho compatível com ARCore e Serviços do Google Play para RA disponíveis. O modo manual permanece utilizável nos demais aparelhos.
+- Renderização local via OpenGL ES 2.0; não há login, API de IA ou upload. Sem sensores compatíveis ou câmera disponível o app deve exibir uma explicação.
+- Estado **experimental**: integração depende de validação física da âncora, orientação da maquete, conforto de zoom e estabilidade do rastreamento.
