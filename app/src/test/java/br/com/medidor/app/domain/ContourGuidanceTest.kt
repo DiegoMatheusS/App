@@ -34,6 +34,29 @@ class ContourGuidanceTest {
             ContourVisualQuality.assess(unstable,good).rating)
     }
 
+    @Test fun detectsSelectionJumpEvenWhenPixelAreaIsUnchanged() {
+        val first = PlanarContourResult(100,100,20,20,39,39,400,emptyList())
+        val jumped = first.copy(minX=55,maxX=74)
+        val rating = ContourVisualQuality.assess(jumped,first)
+        assertEquals(ContourVisualRating.CAUTION,rating.rating)
+        assertTrue(rating.explanation.contains("deslocou"))
+    }
+
+    @Test fun detectsBoundingBoxChangeWithSimilarPixelCount() {
+        val original = PlanarContourResult(100,100,30,30,49,49,300,emptyList())
+        val stretched = PlanarContourResult(100,100,25,34,54,45,300,emptyList())
+        val rating = ContourVisualQuality.assess(stretched,original)
+        assertEquals(ContourVisualRating.CAUTION,rating.rating)
+        assertTrue(rating.explanation.contains("Formato"))
+    }
+
+    @Test fun sameContourRemainsApparentlyStableAcrossResolutions() {
+        val small = PlanarContourResult(100,100,30,30,49,49,400,emptyList())
+        val large = PlanarContourResult(200,200,60,60,99,99,1600,emptyList())
+        assertEquals(ContourVisualRating.STABLE,
+            ContourVisualQuality.assess(large,small).rating)
+    }
+
     @Test fun foregroundConnectedToBackgroundIsCappedBySelectedArea() {
         val w=100
         val h=80

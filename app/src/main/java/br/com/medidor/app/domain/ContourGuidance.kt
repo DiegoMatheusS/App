@@ -89,6 +89,25 @@ object ContourVisualQuality {
             if (ratio !in .8..1.25) return ContourVisualAssessment(
                 ContourVisualRating.CAUTION,
                 "Área oscilando entre quadros; resultado aproximado.")
+            // A similar pixel count does not imply the same object remains selected.
+            val previousCenterX = (previous.minX + previous.maxX) / (2.0 * previous.width)
+            val previousCenterY = (previous.minY + previous.maxY) / (2.0 * previous.height)
+            val centerX = (result.minX + result.maxX) / (2.0 * result.width)
+            val centerY = (result.minY + result.maxY) / (2.0 * result.height)
+            if (abs(centerX - previousCenterX) > .12 ||
+                abs(centerY - previousCenterY) > .12) {
+                return ContourVisualAssessment(ContourVisualRating.CAUTION,
+                    "Contorno deslocou entre quadros; confirme o objeto selecionado.")
+            }
+            val oldWidth = (previous.maxX - previous.minX + 1).toDouble() / previous.width
+            val oldHeight = (previous.maxY - previous.minY + 1).toDouble() / previous.height
+            val newWidth = (result.maxX - result.minX + 1).toDouble() / result.width
+            val newHeight = (result.maxY - result.minY + 1).toDouble() / result.height
+            if (newWidth / oldWidth !in .75..1.33 ||
+                newHeight / oldHeight !in .75..1.33) {
+                return ContourVisualAssessment(ContourVisualRating.CAUTION,
+                    "Formato do contorno mudou entre quadros; confira a seleção.")
+            }
         }
         return if (coverage < .65) ContourVisualAssessment(
             ContourVisualRating.CAUTION, "Região irregular; confira a seleção.")
