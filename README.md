@@ -148,3 +148,10 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - Contornos **não são medição ao vivo**, não reconhecem semanticamente objetos e não inferem distância/depth. Primeiro é preciso congelar a foto, com objeto e referência na mesma profundidade. Contornos com fundo de cor semelhante podem falhar; não confiar em resultados sem conferir os limites.
 - **Tanques:** o cálculo existente de volume ocupado pelo nível foi ampliado para entrada de altura em metros, centímetros ou porcentagem de altura interna. Mostra litros/m³ ocupados e livres e, opcionalmente, massa aproximada usando densidade aparente informada pelo usuário em kg/m³. Percentual de altura não equivale a percentual de volume em tanque horizontal/esférico.
 - Necessária validação física no Android de seletor de PDF/DXF, contorno da foto, performance e medições; os testes unitários cobrem parser DXF, seleção de cor e conversões de nível.
+
+## PR #16 — Verificação de geometria epipolar offline
+- Após as correspondências 2D, estima-se experimentalmente uma **matriz fundamental** com o método de oito pontos normalizados e RANSAC determinístico.
+- Uma estimativa de erro de Sampson em pixels avalia se os pontos de duas fotografias respeitam uma restrição epipolar aproximada, resistente a algumas correspondências incorretas.
+- A interface mostra **correspondências compatíveis com geometria epipolar** separadamente da contagem original de correspondências pela transformação 2D, evitando confundir os dois modelos.
+- Limites explícitos de pontos e iterações; processo offline, sem API externa. Testes unitários incluem câmeras sintéticas com profundidades variadas, correspondências falsas, dados insuficientes e pontos degenerados.
+- **Não** é calibração de câmera, estimação de matriz essencial, orientação/translação das câmeras, triangulação ou geração de malha. Não corrige degenerescências de cenas planas/rotação pura e não oferece precisão métrica. A qualidade exige validação física com fotos reais.
