@@ -104,6 +104,50 @@ fun ScannerCaptureScreen() {
         if (granted) showCamera = true
         else feedback = "Câmera não autorizada. Você pode importar fotos pela galeria."
     }
+    var exportingId by remember { mutableStateOf<String?>(null) }
+    val exportZip = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        val id = exportingId
+        exportingId = null
+        if (uri != null && id != null && !busy) scope.launch {
+            busy = true
+            try {
+                withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: error("Não foi possível criar o ZIP.")
+                    store.exportSession(id, output)
+                }
+                feedback = "Cópia ZIP criada. Guarde o arquivo em local seguro."
+            } catch (e: Exception) {
+                feedback = "Falha ao exportar sessão: ${e.localizedMessage}"
+            } finally {
+                busy = false
+            }
+        }
+    }
+    val importZip = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null && !busy) scope.launch {
+            busy = true
+            try {
+                val restored = withContext(Dispatchers.IO) {
+                    val input = context.contentResolver.openInputStream(uri)
+                        ?: error("Não foi possível abrir o ZIP.")
+                    store.importSession(input)
+                }
+                reload(restored.id)
+                position = ScannerCaptureGuide.nextMissing(restored.frames.keys) ?: 0
+                showCamera = false
+                feedback = "Sessão recuperada em uma cópia separada, sem apagar as anteriores."
+            } catch (e: Exception) {
+                feedback = "ZIP não restaurado: ${e.localizedMessage}"
+            } finally {
+                busy = false
+            }
+        }
+    }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val sessionId = activeId
         val slot = position
@@ -142,8 +186,8 @@ fun ScannerCaptureScreen() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(if (dialog == "delete" || dialog == "deleteShot")
-                        "A ação é permanente. As fotografias desta sessão ainda não estão " +
-                            "incluídas no backup ZIP do Modo Arquiteto."
+                        "A ação é permanente. Use Exportar sessão ZIP para preservar estas fotos " +
+                            "antes de excluir."
                     else "Dê um nome ao objeto que será fotografado.")
                     if (dialog == "create" || dialog == "rename") {
                         OutlinedTextField(
@@ -246,6 +290,25 @@ fun ScannerCaptureScreen() {
             }
         }
 
+        Text("Backup separado das sessões do Scanner:",
+            style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(enabled = !busy && active != null, onClick = {
+                exportingId = active?.id
+                exportZip.launch("scanner-medidor.zip")
+            }) { Text("Exportar sessão ZIP") }
+            OutlinedButton(
+                enabled = !busy && sessions.size < ScannerCaptureGuide.MAX_SESSIONS,
+                onClick = {
+                    importZip.launch(arrayOf("application/zip", "application/octet-stream"))
+                }
+            ) { Text("Importar sessão ZIP") }
+        }
+        Text("Cada ZIP guarda uma sessão com suas fotos. A importação cria uma nova sessão, " +
+            "verificando tamanho, arquivos e hashes SHA-256 antes de salvar. " +
+            "Guarde os ZIPs em local seguro; não são criptografados.",
+            style = MaterialTheme.typography.bodySmall)
+
         if (active == null) {
             Text("Crie uma sessão para começar a fotografar.")
         } else {
@@ -323,9 +386,8 @@ fun ScannerCaptureScreen() {
                     showCamera = false
                 }) { Text("Ir para a próxima foto pendente") }
             }
-            Text("As fotos ficam neste aparelho. No momento, o backup ZIP dos projetos " +
-                "arquitetônicos NÃO inclui as sessões do Scanner 3D. " +
-                "Não apague o aplicativo sem outra cópia dessas imagens.",
+            Text("O backup geral do Modo Arquiteto não inclui estas fotos. " +
+                "Exporte cada sessão do Scanner em ZIP antes de desinstalar o aplicativo.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error)
         }

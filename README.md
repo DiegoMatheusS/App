@@ -111,6 +111,14 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - Em cada posição é possível **capturar pela câmera ou importar da galeria**, substituir uma fotografia ou removê-la; o aplicativo marca etapas completas, progresso e próxima posição pendente.
 - Cada fotografia é reduzida para resolução máxima aproximada de 2048 px e armazenada como JPEG no diretório privado do app. As sessões são persistidas mesmo depois de fechar o aplicativo e podem ser renomeadas ou excluídas com confirmação.
 - O scanner está **na fase de coleta de imagens**. Não existe reconstrução 3D, malha, nuvem de pontos, cálculo de profundidade ou medição tridimensional nessa interface.
-- **Atenção:** o backup ZIP do Modo Arquiteto ainda NÃO inclui as imagens dessas sessões. Não desinstale o aplicativo sem cópia das fotografias. A exportação de sessões e o pipeline de fotogrametria serão etapas próprias.
+- **Backup separado do Scanner:** é possível exportar e restaurar **cada sessão em um ZIP próprio**. O arquivo geral do Modo Arquiteto continua independente e não inclui as imagens do Scanner. Guarde os ZIPs das sessões antes de desinstalar o aplicativo.
 - Câmera e galeria usam recursos nativos do Android, sem login, IA paga ou envio dos dados.
 - Os testes JVM cobrem a sequência de 20 pontos, progressão e detecção de etapas inválidas. Ainda são necessários testes reais de permissão de câmera, retomada e rotação da tela.
+
+## Scanner 3D — recuperação de sessões em ZIP
+- **Exportar sessão ZIP** armazena o nome da sessão e suas imagens numeradas, com tamanho e SHA-256 para cada fotografia. Sem upload ou conversão 3D.
+- **Importar sessão ZIP** restaura uma nova sessão separada, sem apagar ou alterar as existentes. Rejeita nomes de arquivos não permitidos, caminhos perigosos, dados duplicados, fotos ausentes, hashes divergentes, imagens inválidas e arquivos ZIP acima dos limites.
+- Limites: até 20 fotos, 8 MB por foto e **100 MB descompactados por ZIP**; sessões acima desse tamanho precisam reduzir as imagens antes de exportar.
+- O formato ZIP é **não criptografado** e pode conter imagens de locais ou objetos privados. Armazene as cópias de forma segura.
+- Testes unitários exercitam exportação, importação, integridade das fotos, pacote vazio, conteúdo malicioso, manifesto ausente e adulteração de imagens.
+- Testes instrumentados de restauração no Android continuam necessários para certificar a preservação de arquivos em falhas de armazenamento.
