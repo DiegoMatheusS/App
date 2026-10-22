@@ -90,6 +90,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
     var screenError by remember { mutableStateOf<String?>(null) }
     val points = remember { mutableStateListOf<NormalizedPoint>() }
     var saved by remember { mutableStateOf(false) }
+    var selectedPointIndex by remember { mutableStateOf(0) }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             try {
@@ -256,6 +257,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                                     seed = mapped
                                 } else if (points.size < (if (measureStyle == "contour") 2 else 4)) {
                                     points.add(mapped)
+                                    selectedPointIndex = points.lastIndex
                                 }
                                 saved = false
                             }
@@ -303,6 +305,40 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                             Offset(rect.left + rect.width * a.x, rect.top + rect.height * a.y),
                             Offset(rect.left + rect.width * b.x, rect.top + rect.height * b.y),
                             strokeWidth = 3.dp.toPx())
+                    }
+                }
+            }
+            if (points.isNotEmpty()) {
+                Text("Ajuste fino dos pontos", fontWeight = FontWeight.Medium)
+                Text("Selecione um ponto e mova em passos de 1 pixel da fotografia.",
+                    style = MaterialTheme.typography.bodySmall)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(points.size) { index ->
+                        FilterChip(
+                            selected = selectedPointIndex == index,
+                            onClick = { selectedPointIndex = index },
+                            label = { Text(if (index < 2) "Referência ${index + 1}" else "Medida ${index - 1}") }
+                        )
+                    }
+                }
+                val chosen = selectedPointIndex.coerceIn(0, points.lastIndex)
+                val pixelX = 1f / photo.width.coerceAtLeast(1)
+                val pixelY = 1f / photo.height.coerceAtLeast(1)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        "←" to Pair(-pixelX, 0f),
+                        "→" to Pair(pixelX, 0f),
+                        "↑" to Pair(0f, -pixelY),
+                        "↓" to Pair(0f, pixelY)
+                    ).forEach { (label, delta) ->
+                        OutlinedButton(onClick = {
+                            val current = points[chosen]
+                            points[chosen] = NormalizedPoint(
+                                (current.x + delta.first).coerceIn(0f, 1f),
+                                (current.y + delta.second).coerceIn(0f, 1f)
+                            )
+                            saved = false
+                        }) { Text(label) }
                     }
                 }
             }
