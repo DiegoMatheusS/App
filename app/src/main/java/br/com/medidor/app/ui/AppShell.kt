@@ -75,11 +75,7 @@ fun AppShell() {
                 })
                 Destination.PRO -> ProScreen()
                 Destination.ARCHITECT -> ArchitectScreen()
-                Destination.SCANNER -> PlannedFeatureScreen(
-                    title = "Scanner 3D completo",
-                    description = "Captura por vários ângulos e reconstrução por fotogrametria, sem IA generativa.",
-                    stages = listOf("Captura guiada", "Reconstrução geométrica", "Escala e medição 3D", "Exportação GLB/OBJ")
-                )
+                Destination.SCANNER -> ScannerCaptureScreen()
                 Destination.COUNT -> PlannedFeatureScreen(
                     title = "Contagem de objetos",
                     description = "Contagem automática de tijolos, caixas e peças: módulo futuro com IA local e correção manual.",
