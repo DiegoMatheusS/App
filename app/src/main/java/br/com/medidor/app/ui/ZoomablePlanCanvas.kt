@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -85,7 +86,7 @@ internal fun ZoomablePlanCanvas(
                                 val centroid = event.calculateCentroid(useCurrent = true)
                                 val zoom = event.calculateZoom()
                                 val pan = event.calculatePan()
-                                if (centroid.isSpecified) viewport = PlanViewportMath.change(
+                                if (centroid != Offset.Unspecified) viewport = PlanViewportMath.change(
                                     viewport,
                                     size.width.toFloat(),
                                     size.height.toFloat(),
