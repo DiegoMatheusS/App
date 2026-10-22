@@ -59,6 +59,7 @@ import br.com.medidor.app.domain.NormalizedPoint
 import br.com.medidor.app.domain.PhotoCalibration
 import br.com.medidor.app.domain.PlanarContourSegmentation
 import br.com.medidor.app.domain.PlanarContourResult
+import br.com.medidor.app.domain.ReferenceMarkQuality
 import java.io.File
 import kotlin.math.min
 
@@ -320,11 +321,20 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
             if (referenceMm == null) {
                 Text("Digite uma medida positiva e válida.", color = MaterialTheme.colorScheme.error)
             }
-            val mm = if (points.size == 4 && referenceMm != null) {
-                val reference = PhotoCalibration.distancePixels(points[0], points[1], photo.width, photo.height)
+            val referencePixels = if (points.size >= 2) {
+                PhotoCalibration.distancePixels(points[0], points[1], photo.width, photo.height)
+            } else null
+            val referenceIsReadable = referencePixels != null &&
+                ReferenceMarkQuality.isReadable(referencePixels)
+            if (referencePixels != null && !referenceIsReadable) {
+                Text("Referência muito pequena na foto (menos de 20 pixels). " +
+                    "Aproxime a câmera ou marque uma referência maior para reduzir " +
+                    "erros de toque.", color = MaterialTheme.colorScheme.error)
+            }
+            val mm = if (points.size == 4 && referenceMm != null && referenceIsReadable) {
                 val target = PhotoCalibration.distancePixels(points[2], points[3], photo.width, photo.height)
-                if (reference > 0.0) PhotoCalibration.millimetersFromReference(
-                    referenceMm, reference, target) else null
+                PhotoCalibration.millimetersFromReference(
+                    referenceMm, referencePixels!!, target)
             } else null
             if (measureStyle == "contour" && seed != null && contour == null) {
                 Text("Região não isolada. Escolha outro ponto ou ajuste a tolerância. " +
@@ -336,7 +346,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                 val reference = PhotoCalibration.distancePixels(
                     points[0], points[1], photo.width, photo.height
                 )
-                val widthMm = if (reference > 0) PhotoCalibration.millimetersFromReference(
+                val widthMm = if (ReferenceMarkQuality.isReadable(reference)) PhotoCalibration.millimetersFromReference(
                     referenceMm, reference, contour.widthFraction * photo.width
                 ) else null
                 val heightMm = if (reference > 0) PhotoCalibration.millimetersFromReference(
@@ -356,7 +366,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                     "não mede profundidade, curvas 3D nem objetos afastados.",
                     style = MaterialTheme.typography.bodySmall)
             }
-            if (points.size == 4 && mm == null && referenceMm != null) {
+            if (points.size == 4 && mm == null && referenceMm != null && referenceIsReadable) {
                 Text("A referência precisa ter dois pontos diferentes.", color = MaterialTheme.colorScheme.error)
             }
             if (mm != null) {
