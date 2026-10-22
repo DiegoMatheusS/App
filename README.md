@@ -32,7 +32,7 @@ No Android Studio: abrir a pasta do projeto, instalar Android SDK 37 e sincroniz
 
 1. Melhorar foto calibrada: retificação de perspectiva, zoom de precisão, galeria de imagens associadas às medições.
 2. Persistência Room, projetos/relatórios e testes instrumentados.
-3. Modo Arquiteto: retificação de perspectiva, alinhamento manual entre andares, editor de paredes e aberturas aprimorado -> ARCore.
+3. Modo Arquiteto: alinhar rotação/escala entre andares, edição detalhada de paredes/aberturas e validação física do ARCore.
 4. Scanner 3D por fotogrametria offline, com benchmarks de hardware.
 5. Detecção/contagem de tijolos com modelo de IA local opcional.
 6. Pro Completo: implementar Google Play Billing, validação e restauração real da compra única.
@@ -62,3 +62,11 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - O AR sobre o papel agora distingue rastreamento visual direto, última posição estimada quando o papel sai da câmera, rastreamento pausado e referência perdida. Para melhores resultados, a folha deve permanecer fixa, plana, bem iluminada e ocupar pelo menos 25% do enquadramento inicialmente.
 - Aviso de imagem com poucos detalhes e mensagem específica quando o ARCore rejeitar a imagem. Esse aviso é apenas heurístico; aprovação visual e precisão permanecem dependentes do ARCore e de testes físicos.
 - A renderização da maquete reutiliza buffers geométricos, reduzindo alocações repetidas durante a navegação.
+
+## PR #7 — Retificação de folhas e pontos de referência
+- **Corrigir perspectiva (manual):** selecionar os quatro cantos de uma folha retangular e plana (superior esquerdo, superior direito, inferior direito, inferior esquerdo), informar **largura e altura reais da folha em centímetros**, e aplicar uma transformação projetiva local. A imagem resultante fica limitada a 2048 px por lado. Não é detecção automática da planta.
+- A retificação aplica a proporção física **da própria folha**. É válida apenas se os pontos representam os cantos dessa folha plana; não corrige aberração óptica, curvatura, má impressão ou distorções internas de desenhos.
+- **Proteção das marcações:** como a perspectiva altera a geometria da imagem, a correção limpa escala, paredes, portas, janelas e ponto de alinhamento do pavimento afetado, com confirmação antes da substituição. Refaça a escala após corrigir.
+- **Alinhamento por um ponto arquitetônico:** tocar em um ponto correspondente no térreo e no andar superior, com escalas previamente definidas, para calcular os deslocamentos X/Y automaticamente. Ajustes manuais continuam disponíveis. Um ponto determina a translação, **não** corrige diferença de rotação ou escala entre plantas.
+- Os pontos são persistidos nos projetos locais com compatibilidade com arquivos anteriores; testes cobrem o quadrilátero, proporção de saída, orientação, pontos inválidos e deslocamentos.
+- A conversão continua sendo **uma estimativa** baseada na qualidade da planta e da calibração; não é aferição de obra nem medição certificada.

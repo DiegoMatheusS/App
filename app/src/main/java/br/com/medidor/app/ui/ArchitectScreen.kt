@@ -31,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -54,6 +55,8 @@ import br.com.medidor.app.domain.FloorPlanMath
 import br.com.medidor.app.domain.PlanFloor
 import br.com.medidor.app.domain.PlanPoint
 import br.com.medidor.app.domain.PlanWall
+import br.com.medidor.app.domain.PlanRectification
+import br.com.medidor.app.domain.PlanLandmarkAlignment
 import android.graphics.Bitmap
 import android.graphics.Paint
 import java.util.Locale
@@ -76,6 +79,10 @@ fun ArchitectScreen() {
     var preview3D by rememberSaveable { mutableStateOf(false) }
     var paperWidthCm by rememberSaveable { mutableStateOf("21") }
     var confirmErase by remember { mutableStateOf(false) }
+    var confirmRectify by remember { mutableStateOf(false) }
+    var sheetWidth by rememberSaveable { mutableStateOf("21") }
+    var sheetHeight by rememberSaveable { mutableStateOf("29,7") }
+    val perspectiveCorners = remember { mutableStateListOf<PlanPoint>() }
     var error by remember { mutableStateOf<String?>(null) }
 
     val selected = project.selectedFloor
@@ -101,6 +108,7 @@ fun ArchitectScreen() {
     fun chooseFloor(index: Int) {
         if (index == selected) return
         pending = null
+        perspectiveCorners.clear()
         editingMode = "reference"
         persist(project.copy(selectedFloor = index))
     }
@@ -117,9 +125,11 @@ fun ArchitectScreen() {
                     referenceStart = null,
                     referenceEnd = null,
                     walls = emptyList(),
-                    openings = emptyList()
+                    openings = emptyList(),
+                    alignmentPoint = null
                 ))
                 editingMode = "reference"
+                perspectiveCorners.clear()
                 pending = null
             } catch (e: Exception) {
                 error = "Falha ao importar planta: ${e.localizedMessage}"
@@ -127,6 +137,59 @@ fun ArchitectScreen() {
         }
     }
 
+    fun rectifySelectedPlan() {
+        try {
+            val original = repository.readImage(current.imageFile)
+                ?: error("Imagem original não encontrada.")
+            val w = sheetWidth.trim().replace(',', '.').toDoubleOrNull()
+            val h = sheetHeight.trim().replace(',', '.').toDoubleOrNull()
+            if (w == null || h == null) throw IllegalArgumentException("Informe largura e altura reais da folha.")
+            try {
+                val corrected = PlanBitmapRectifier.rectify(
+                    original, perspectiveCorners.toList(), w, h
+                )
+                try {
+                    val name = repository.saveImage(corrected)
+                    editFloor(current.copy(
+                        imageFile = name,
+                        imageWidth = corrected.width,
+                        imageHeight = corrected.height,
+                        referenceStart = null,
+                        referenceEnd = null,
+                        alignmentPoint = null,
+                        walls = emptyList(),
+                        openings = emptyList()
+                    ))
+                    pending = null
+                    perspectiveCorners.clear()
+                    editingMode = "reference"
+                } finally {
+                    corrected.recycle()
+                }
+            } finally {
+                original.recycle()
+            }
+        } catch (e: Exception) {
+            error = "Não foi possível corrigir a perspectiva: ${e.localizedMessage}"
+        }
+    }
+
+    if (confirmRectify) {
+        AlertDialog(
+            onDismissRequest = { confirmRectify = false },
+            title = { Text("Substituir desenho da planta?") },
+            text = { Text("A nova imagem será salva, mas a escala, as paredes, as portas, " +
+                "as janelas e o ponto de alinhamento deste andar serão apagados. " +
+                "Será necessário recalibrar e marcar novamente.") },
+            confirmButton = { TextButton(onClick = {
+                confirmRectify = false
+                rectifySelectedPlan()
+            }) { Text("Corrigir e limpar marcações") } },
+            dismissButton = { TextButton(onClick = { confirmRectify = false }) {
+                Text("Cancelar")
+            } }
+        )
+    }
     if (confirmErase) {
         AlertDialog(
             onDismissRequest = { confirmErase = false },
@@ -150,7 +213,7 @@ fun ArchitectScreen() {
         Text("Editor de plantas — prévia", style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold)
         Text("Importe uma planta vista de cima, marque uma referência real e desenhe as paredes tocando nos extremos. " +
-            "O projeto é salvo offline. Ainda não há leitura automática, PDF ou AR.",
+            "O projeto é salvo offline. AR é experimental; leitura automática de plantas e PDF ainda não estão disponíveis.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Text("Pavimentos", style = MaterialTheme.typography.titleMedium)
@@ -188,6 +251,25 @@ fun ArchitectScreen() {
             style = MaterialTheme.typography.bodySmall)
         if (selected > 0) {
             Text("Posição horizontal do pavimento", style = MaterialTheme.typography.titleMedium)
+            val alignment = PlanLandmarkAlignment.suggestedOffset(project.floors[0], current)
+            Text("Alinhamento por referência: marque o mesmo ponto físico no térreo e neste andar " +
+                "(ex.: centro da escada ou pilar). As duas plantas precisam estar calibradas.",
+                style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(
+                enabled = alignment != null &&
+                    alignment.first in -20.0..20.0 && alignment.second in -20.0..20.0,
+                onClick = {
+                    alignment?.let { (x, y) ->
+                        offsetXText = formatMeters(x)
+                        offsetYText = formatMeters(y)
+                        editFloor(current.copy(offsetXMeters = x, offsetYMeters = y))
+                    }
+                }
+            ) { Text("Alinhar com ponto do térreo") }
+            if (alignment == null) {
+                Text("Pendente: ponto de referência e escala nos dois pavimentos.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
             OutlinedTextField(
                 value = offsetXText,
                 onValueChange = { offsetXText = it },
@@ -245,7 +327,16 @@ fun ArchitectScreen() {
                     error = "Informe uma medida positiva em metros."
                 }
             }) { Text("Aplicar medida de referência") }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(selected = editingMode == "perspective", onClick = {
+                    editingMode = "perspective"; pending = null; perspectiveCorners.clear()
+                }, label = { Text("Corrigir perspectiva") })
+                FilterChip(selected = editingMode == "landmark", onClick = {
+                    editingMode = "landmark"; pending = null; perspectiveCorners.clear()
+                }, label = { Text("Ponto de alinhamento") })
                 FilterChip(selected = editingMode == "reference", onClick = {
                     editingMode = "reference"; pending = null
                 }, label = { Text("Marcar escala") })
@@ -258,6 +349,11 @@ fun ArchitectScreen() {
             }
             Text(
                 when {
+                    editingMode == "perspective" ->
+                        "Marque os cantos da folha nesta ordem: superior esquerdo, superior direito, " +
+                            "inferior direito, inferior esquerdo (${perspectiveCorners.size}/4)."
+                    editingMode == "landmark" ->
+                        "Toque no mesmo ponto físico usado no outro pavimento para alinhar."
                     pending == null && editingMode == "reference" ->
                         "Toque nos dois extremos da distância conhecida."
                     pending != null && editingMode == "reference" ->
@@ -272,26 +368,73 @@ fun ArchitectScreen() {
                 bitmap = bitmap,
                 floor = current,
                 pending = pending,
+                perspectiveCorners = perspectiveCorners,
                 showLines = showLines,
                 showMeasurements = showMeasurements,
                 onTap = { point ->
-                    val first = pending
-                    if (first == null) {
-                        pending = point
-                    } else if (first != point) {
-                        if (editingMode == "reference") {
-                            editFloor(current.copy(referenceStart = first, referenceEnd = point))
-                            editingMode = "walls"
-                        } else if (current.calibrated) {
-                            val wall = PlanWall(first, point)
-                            if ((FloorPlanMath.wallLengthMeters(current, wall) ?: 0.0) > 0.01) {
-                                editFloor(current.copy(walls = current.walls + wall))
+                    when (editingMode) {
+                        "perspective" -> {
+                            if (perspectiveCorners.size < 4) perspectiveCorners.add(point)
+                        }
+                        "landmark" -> {
+                            editFloor(current.copy(alignmentPoint = point))
+                            editingMode = if (current.calibrated) "walls" else "reference"
+                        }
+                        else -> {
+                            val first = pending
+                            if (first == null) {
+                                pending = point
+                            } else if (first != point) {
+                                if (editingMode == "reference") {
+                                    editFloor(current.copy(referenceStart = first, referenceEnd = point))
+                                    editingMode = "walls"
+                                } else if (editingMode == "walls" && current.calibrated) {
+                                    val wall = PlanWall(first, point)
+                                    if ((FloorPlanMath.wallLengthMeters(current, wall) ?: 0.0) > 0.01) {
+                                        editFloor(current.copy(walls = current.walls + wall))
+                                    }
+                                }
+                                pending = null
                             }
                         }
-                        pending = null
                     }
                 }
             )
+            if (editingMode == "perspective") {
+                OutlinedTextField(
+                    value = sheetWidth,
+                    onValueChange = { sheetWidth = it },
+                    label = { Text("Largura real da folha (cm)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                OutlinedTextField(
+                    value = sheetHeight,
+                    onValueChange = { sheetHeight = it },
+                    label = { Text("Altura real da folha (cm)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                val width = sheetWidth.replace(',', '.').toDoubleOrNull() ?: 0.0
+                val height = sheetHeight.replace(',', '.').toDoubleOrNull() ?: 0.0
+                val valid = PlanRectification.targetSize(
+                    perspectiveCorners.toList(), bitmap.width, bitmap.height, width, height
+                ) != null
+                Button(enabled = valid, onClick = {
+                    if (current.walls.isNotEmpty() || current.referenceStart != null ||
+                        current.referenceEnd != null || current.openings.isNotEmpty() ||
+                        current.alignmentPoint != null) confirmRectify = true
+                    else rectifySelectedPlan()
+                }) { Text("Aplicar correção de perspectiva") }
+                OutlinedButton(enabled = perspectiveCorners.isNotEmpty(), onClick = {
+                    perspectiveCorners.removeAt(perspectiveCorners.lastIndex)
+                }) { Text("Desfazer canto") }
+                Text("A correção funciona somente com folha plana e retangular; " +
+                    "não remove distorção da lente. Após aplicar, calibre novamente a escala.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
             if (pending != null) {
                 OutlinedButton(onClick = { pending = null }) { Text("Cancelar ponto atual") }
             }
@@ -426,6 +569,7 @@ private fun FloorPlanCanvas(
     bitmap: Bitmap,
     floor: PlanFloor,
     pending: PlanPoint?,
+    perspectiveCorners: List<PlanPoint>,
     showLines: Boolean,
     showMeasurements: Boolean,
     onTap: (PlanPoint) -> Unit
@@ -491,6 +635,22 @@ private fun FloorPlanCanvas(
                         )
                     }
                 }
+            }
+            if (perspectiveCorners.isNotEmpty()) {
+                perspectiveCorners.forEachIndexed { index, point ->
+                    drawCircle(Color(0xFFFFC107), 7.dp.toPx(), center(point))
+                    if (index > 0) {
+                        drawLine(Color(0xFFFFC107), center(perspectiveCorners[index - 1]),
+                            center(point), 2.dp.toPx())
+                    }
+                }
+                if (perspectiveCorners.size == 4) {
+                    drawLine(Color(0xFFFFC107), center(perspectiveCorners[3]),
+                        center(perspectiveCorners[0]), 2.dp.toPx())
+                }
+            }
+            floor.alignmentPoint?.let {
+                drawCircle(Color(0xFFE91E63), 7.dp.toPx(), center(it))
             }
             pending?.let { drawCircle(Color(0xFFF44336), 7.dp.toPx(), center(it)) }
         }
