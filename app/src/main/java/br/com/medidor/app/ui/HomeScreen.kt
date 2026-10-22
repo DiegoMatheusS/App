@@ -41,7 +41,7 @@ fun HomeScreen(onOpen: (Destination) -> Unit) {
         Text("Próximos módulos", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         ToolCard("Modo Arquiteto", "Plantas, portas, janelas e maquete 3D interativa", "PRÉVIA · PRO",
             onClick = { onOpen(Destination.ARCHITECT) })
-        ToolCard("Scanner 3D completo", "Fotogrametria e visualização do modelo", "PLANEJADO · PRO",
+        ToolCard("Scanner 3D — captura guiada", "Fotografe o objeto em várias posições e salve uma sessão", "PRÉVIA · PRO",
             onClick = { onOpen(Destination.SCANNER) })
         ToolCard("Contador de objetos", "Tijolos, peças e caixas com IA local", "PLANEJADO · PRO",
             onClick = { onOpen(Destination.COUNT) })

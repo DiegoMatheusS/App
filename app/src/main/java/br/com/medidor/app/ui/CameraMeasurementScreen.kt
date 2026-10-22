@@ -249,7 +249,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
 }
 
 @Composable
-private fun CameraPreviewAndCapture(onPhoto: (Bitmap) -> Unit, onError: (String) -> Unit) {
+internal fun CameraPreviewAndCapture(onPhoto: (Bitmap) -> Unit, onError: (String) -> Unit) {
     val context = LocalContext.current
     val owner = context as? ComponentActivity
     val view = remember(context) {

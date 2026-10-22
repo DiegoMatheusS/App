@@ -105,3 +105,12 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - **Extração de backup ZIP reforçada** e reutilizável, testada com arquivos ZIP reais em memória, incluindo fluxo normal, tentativa de leitura fora do diretório, arquivo não permitido, manifesto ausente e manifesto compactado acima do limite.
 - Na restauração, o tamanho da planta declarado pelo projeto precisa corresponder às dimensões reais da imagem JPEG. Backups inválidos são rejeitados antes de substituir os projetos.
 - **Limites da validação:** testes JVM verificam a leitura de ZIP e o conteúdo/paginação do relatório, mas ainda faltam testes instrumentados no Android de backup/restauração completos, arquivos PDF abertos em leitores e comportamento em caso de falha de armazenamento.
+
+## Scanner 3D — PR #12 (captura guiada, sem reconstrução)
+- Até 8 sessões locais com nome, 20 posições de fotografia por sessão: 12 ao redor do objeto, com a câmera aproximadamente horizontal, e 8 posições elevadas.
+- Em cada posição é possível **capturar pela câmera ou importar da galeria**, substituir uma fotografia ou removê-la; o aplicativo marca etapas completas, progresso e próxima posição pendente.
+- Cada fotografia é reduzida para resolução máxima aproximada de 2048 px e armazenada como JPEG no diretório privado do app. As sessões são persistidas mesmo depois de fechar o aplicativo e podem ser renomeadas ou excluídas com confirmação.
+- O scanner está **na fase de coleta de imagens**. Não existe reconstrução 3D, malha, nuvem de pontos, cálculo de profundidade ou medição tridimensional nessa interface.
+- **Atenção:** o backup ZIP do Modo Arquiteto ainda NÃO inclui as imagens dessas sessões. Não desinstale o aplicativo sem cópia das fotografias. A exportação de sessões e o pipeline de fotogrametria serão etapas próprias.
+- Câmera e galeria usam recursos nativos do Android, sem login, IA paga ou envio dos dados.
+- Os testes JVM cobrem a sequência de 20 pontos, progressão e detecção de etapas inválidas. Ainda são necessários testes reais de permissão de câmera, retomada e rotação da tela.
