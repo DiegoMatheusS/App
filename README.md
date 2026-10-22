@@ -155,3 +155,13 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - A interface mostra **correspondências compatíveis com geometria epipolar** separadamente da contagem original de correspondências pela transformação 2D, evitando confundir os dois modelos.
 - Limites explícitos de pontos e iterações; processo offline, sem API externa. Testes unitários incluem câmeras sintéticas com profundidades variadas, correspondências falsas, dados insuficientes e pontos degenerados.
 - **Não** é calibração de câmera, estimação de matriz essencial, orientação/translação das câmeras, triangulação ou geração de malha. Não corrige degenerescências de cenas planas/rotação pura e não oferece precisão métrica. A qualidade exige validação física com fotos reais.
+
+## Conversão assistida de desenho DXF para paredes e maquete 3D (PR #18)
+- Arquivos DXF **ASCII** com entidades `LINE` e `LWPOLYLINE` de trechos retos são interpretados offline. Polilinhas fechadas criam as arestas finais; polilinhas com arcos (bulges) são rejeitadas, e não discretizadas silenciosamente.
+- O aplicativo identifica as **camadas (layers)** do desenho e mostra quantas linhas cada uma possui. O usuário escolhe **uma camada** com as paredes pretendidas ou mantém apenas o desenho como imagem de referência.
+- Para transformar a camada em paredes editáveis, é obrigatório selecionar **a unidade física real** (milímetros, centímetros, metros, polegadas ou pés). A escala é calculada da geometria DXF e preenchida na planta; não se pressupõe que todo DXF está em metros.
+- Cada linha dessa camada, com comprimento físico entre 2 cm e 1 km, se torna uma parede no Modo Arquiteto, sujeita a revisão visual e ao pé-direito informado. O limite é de **300 paredes por importação** para conter problemas de desempenho.
+- Antes de substituir imagem, marcações e aberturas do pavimento, a tela exibe confirmação com aviso explícito. Não há classificação automática semântica: uma camada com cotas, móveis ou instalações marcada como paredes criará paredes erradas.
+- A mesma transformação XY é utilizada para rasterizar a referência e definir vértices normalizados, mantendo as medidas das paredes consistentes com a escala importada. A prévia 3D existente é utilizada sem novo serviço.
+- Não é importação nativa de DWG/RVT/IFC nem BIM; blocos, curvas, cotas, aberturas automáticas e alturas contidas no CAD continuam fora do escopo. Ainda é necessário verificar unidade, camada e geometria, além de validar no Android real.
+- Testes unitários cobrem a leitura de LINE/LWPOLYLINE, camadas, rejeição de arcos, conversão de unidades e consistência de medidas em metros.

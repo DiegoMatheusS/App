@@ -8,11 +8,20 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import br.com.medidor.app.domain.DxfPreview
+import br.com.medidor.app.domain.DxfLine
+import br.com.medidor.app.domain.DxfDrawingLayout
+import br.com.medidor.app.domain.DxfWallImport
 import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.min
 
-/** Safely turns a chosen PDF page or ASCII DXF LINE drawing into a plan bitmap. */
+/** Parsed drawing stays in memory until the user confirms layer/unit conversion. */
+internal data class ImportedDxf(
+    val lines: List<DxfLine>,
+    val layout: DxfDrawingLayout
+)
+
+/** Safely turns a chosen PDF page or supported DXF lines into a plan bitmap. */
 internal object ArchitectDocumentImport {
     fun pageCount(resolver: ContentResolver, uri: Uri): Int {
         val handle = resolver.openFileDescriptor(uri, "r") ?: error("PDF não pode ser aberto.")
@@ -42,7 +51,7 @@ internal object ArchitectDocumentImport {
         }
     }
 
-    fun dxf(resolver: ContentResolver, uri: Uri): Bitmap {
+    fun readDxf(resolver: ContentResolver, uri: Uri): ImportedDxf {
         val input = resolver.openInputStream(uri) ?: error("DXF não pode ser aberto.")
         val text = input.use {
             val data = ByteArrayOutputStream()
@@ -56,19 +65,12 @@ internal object ArchitectDocumentImport {
             data.toString(Charsets.UTF_8.name())
         }
         val lines = DxfPreview.parse(text)
-        val minX = lines.minOf { min(it.x1,it.x2) }
-        val maxX = lines.maxOf { max(it.x1,it.x2) }
-        val minY = lines.minOf { min(it.y1,it.y2) }
-        val maxY = lines.maxOf { max(it.y1,it.y2) }
-        val spanX = maxX-minX
-        val spanY = maxY-minY
-        require(spanX.isFinite() && spanY.isFinite() && max(spanX,spanY) > 1e-6) {
-            "DXF sem área desenhada."
-        }
-        val scale = 1840.0 / max(spanX,spanY)
-        val w = (spanX * scale + 160).toInt().coerceIn(160,2048)
-        val h = (spanY * scale + 160).toInt().coerceIn(160,2048)
-        val result = Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888)
+        return ImportedDxf(lines, DxfWallImport.layout(lines))
+    }
+
+    fun renderDxf(drawing: ImportedDxf): Bitmap {
+        val layout = drawing.layout
+        val result = Bitmap.createBitmap(layout.width,layout.height,Bitmap.Config.ARGB_8888)
         try {
             val canvas = Canvas(result)
             canvas.drawColor(Color.WHITE)
@@ -77,12 +79,11 @@ internal object ArchitectDocumentImport {
                 strokeWidth = 2.5f
                 style = Paint.Style.STROKE
             }
-            lines.forEach { line ->
-                val x0 = (80+(line.x1-minX)*scale).toFloat()
-                val x1 = (80+(line.x2-minX)*scale).toFloat()
-                val y0 = (h-80-(line.y1-minY)*scale).toFloat()
-                val y1 = (h-80-(line.y2-minY)*scale).toFloat()
-                canvas.drawLine(x0,y0,x1,y1,paint)
+            drawing.lines.forEach { line ->
+                canvas.drawLine(
+                    layout.imageX(line.x1),layout.imageY(line.y1),
+                    layout.imageX(line.x2),layout.imageY(line.y2),paint
+                )
             }
             return result
         } catch (e: Exception) {
@@ -90,4 +91,9 @@ internal object ArchitectDocumentImport {
             throw e
         }
     }
+
+    /** Compatibility with the original bitmap-only DXF import. */
+    fun dxf(resolver: ContentResolver, uri: Uri): Bitmap =
+        renderDxf(readDxf(resolver, uri))
+
 }

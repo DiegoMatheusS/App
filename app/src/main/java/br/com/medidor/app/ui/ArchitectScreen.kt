@@ -59,6 +59,8 @@ import br.com.medidor.app.domain.PlanPoint
 import br.com.medidor.app.domain.PlanWall
 import br.com.medidor.app.domain.PlanRectification
 import br.com.medidor.app.domain.PlanLandmarkAlignment
+import br.com.medidor.app.domain.DxfWallImport
+import br.com.medidor.app.domain.DxfDrawingUnit
 import android.graphics.Bitmap
 import android.graphics.Paint
 import java.util.Locale
@@ -91,6 +93,9 @@ fun ArchitectScreen() {
     var selectedPdf by remember { mutableStateOf<Uri?>(null) }
     var pdfPages by remember { mutableStateOf(0) }
     var pdfPageText by remember { mutableStateOf("1") }
+    var dxfDraft by remember { mutableStateOf<ImportedDxf?>(null) }
+    var selectedDxfLayer by remember { mutableStateOf<String?>(null) }
+    var selectedDxfUnit by remember { mutableStateOf<DxfDrawingUnit?>(null) }
 
     val selected = project.selectedFloor
     val current = project.floors[selected]
@@ -179,10 +184,118 @@ fun ArchitectScreen() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) try {
-            saveImportedDrawing(ArchitectDocumentImport.dxf(context.contentResolver, uri))
+            dxfDraft = ArchitectDocumentImport.readDxf(context.contentResolver, uri)
+            selectedDxfLayer = null
+            selectedDxfUnit = null
         } catch (e: Exception) {
             error = "Não foi possível importar DXF: ${e.localizedMessage}"
         }
+    }
+
+    if (dxfDraft != null) {
+        val drawing = dxfDraft!!
+        val layers = DxfWallImport.layers(drawing.lines)
+        val layerCount = selectedDxfLayer?.let { layers[it] } ?: 0
+        AlertDialog(
+            onDismissRequest = { dxfDraft = null },
+            title = { Text("Importar desenho DXF") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${drawing.lines.size} segmentos de desenho. Selecione somente " +
+                        "uma camada que realmente contenha paredes.")
+                    Text("A importação substitui a imagem e as marcações do andar atual. " +
+                        "Portas e janelas anteriores serão removidas.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = selectedDxfLayer == null,
+                            onClick = { selectedDxfLayer = null },
+                            label = { Text("Só desenho (sem paredes)") }
+                        )
+                        layers.forEach { (layer, count) ->
+                            FilterChip(
+                                selected = selectedDxfLayer == layer,
+                                onClick = { selectedDxfLayer = layer },
+                                label = { Text("$layer ($count)") }
+                            )
+                        }
+                    }
+                    if (selectedDxfLayer != null) {
+                        Text("Selecione a UNIDADE REAL do arquivo DXF. " +
+                            "Não é possível inferi-la com segurança apenas pelas linhas.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Row(Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            DxfDrawingUnit.entries.forEach { unit ->
+                                FilterChip(
+                                    selected = selectedDxfUnit == unit,
+                                    onClick = { selectedDxfUnit = unit },
+                                    label = { Text(unit.label) }
+                                )
+                            }
+                        }
+                        Text("A camada selecionada possui $layerCount segmentos. " +
+                            "O máximo é ${DxfWallImport.MAX_WALLS} paredes por importação. " +
+                            "Todas essas linhas serão tratadas como paredes até você revisá-las.",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Suporta LINE e polilinhas retas. Cotas, móveis e portas em uma " +
+                        "camada escolhida incorretamente também virariam paredes. " +
+                        "Confira a prévia 3D depois.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = selectedDxfLayer == null ||
+                        (selectedDxfUnit != null && layerCount in 1..DxfWallImport.MAX_WALLS),
+                    onClick = {
+                        try {
+                            val converted = selectedDxfLayer?.let { layer ->
+                                DxfWallImport.convert(
+                                    drawing.lines,drawing.layout,layer,
+                                    requireNotNull(selectedDxfUnit)
+                                )
+                            }
+                            val bitmap = ArchitectDocumentImport.renderDxf(drawing)
+                            try {
+                                val filename = repository.saveImage(bitmap)
+                                editFloor(current.copy(
+                                    imageFile = filename,
+                                    imageWidth = bitmap.width,
+                                    imageHeight = bitmap.height,
+                                    referenceStart = converted?.referenceStart,
+                                    referenceEnd = converted?.referenceEnd,
+                                    knownMeters = converted?.referenceMeters ?: current.knownMeters,
+                                    walls = converted?.walls ?: emptyList(),
+                                    openings = emptyList(),
+                                    alignmentPoint = null,
+                                    secondAlignmentPoint = null
+                                ))
+                                if (converted != null) {
+                                    referenceText = converted.referenceMeters.toString()
+                                    editingMode = "walls"
+                                } else {
+                                    editingMode = "reference"
+                                }
+                                pending = null
+                                perspectiveCorners.clear()
+                                dxfDraft = null
+                            } finally {
+                                bitmap.recycle()
+                            }
+                        } catch (e: Exception) {
+                            error = "Importação DXF não concluída: ${e.localizedMessage}"
+                        }
+                    }
+                ) { Text("Importar desenho") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dxfDraft = null }) { Text("Cancelar") }
+            }
+        )
     }
 
     if (selectedPdf != null) {
@@ -459,9 +572,9 @@ fun ArchitectScreen() {
                 openDxf.launch(arrayOf("application/dxf", "image/vnd.dxf", "application/octet-stream", "text/plain"))
             }) { Text("Importar DXF") }
         }
-        Text("PDF: selecione uma página. DXF: importa linhas de desenho ASCII como referência. " +
-            "Para gerar 3D, marque as paredes, calibre a escala e informe as alturas. " +
-            "DWG, IFC e RVT ainda não são aceitos.",
+        Text("PDF: escolha uma página e desenhe paredes manualmente. DXF: importe uma " +
+            "camada de linhas como paredes editáveis, após escolher a unidade do desenho, " +
+            "ou use apenas como referência. DWG, IFC e RVT ainda não são aceitos.",
             style = MaterialTheme.typography.bodySmall)
         val bitmap = remember(current.imageFile) { repository.readImage(current.imageFile) }
         if (bitmap != null) {
