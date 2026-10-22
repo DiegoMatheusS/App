@@ -44,6 +44,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraX")
     implementation("androidx.camera:camera-view:$cameraX")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
+    implementation("com.google.ar:core:1.56.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

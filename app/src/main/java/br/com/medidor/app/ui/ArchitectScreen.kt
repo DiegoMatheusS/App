@@ -1,5 +1,6 @@
 package br.com.medidor.app.ui
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -73,6 +74,7 @@ fun ArchitectScreen() {
     var showMeasurements by rememberSaveable { mutableStateOf(true) }
     var showAllFloors by rememberSaveable { mutableStateOf(true) }
     var preview3D by rememberSaveable { mutableStateOf(false) }
+    var paperWidthCm by rememberSaveable { mutableStateOf("21") }
     var confirmErase by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -312,6 +314,41 @@ fun ArchitectScreen() {
             )
             Text("Prévia tridimensional interativa das paredes marcadas com portas e janelas. " +
                 "Ainda não é um modelo CAD/BIM, scanner 3D ou realidade aumentada.",
+                style = MaterialTheme.typography.bodySmall)
+        }
+        if (current.calibrated && project.floors.any { it.walls.isNotEmpty() }) {
+            Text("Realidade aumentada (experimental)", style = MaterialTheme.typography.titleMedium)
+            Text("Disponível apenas nos aparelhos compatíveis com ARCore. " +
+                "Na mesa, toque numa superfície detectada. No papel, use a planta impressa " +
+                "igual à imagem importada.")
+            OutlinedTextField(
+                value = paperWidthCm,
+                onValueChange = { paperWidthCm = it },
+                label = { Text("Largura da folha impressa (cm)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    context.startActivity(Intent(context, ArchitectArActivity::class.java).apply {
+                        putExtra(ArchitectArActivity.EXTRA_MODE, ArchitectArActivity.MODE_TABLE)
+                    })
+                }) { Text("AR na mesa") }
+                val paperCm = paperWidthCm.replace(',', '.').toFloatOrNull()
+                Button(
+                    enabled = current.imageFile != null && paperCm != null &&
+                        paperCm.isFinite() && paperCm > 0f,
+                    onClick = {
+                        context.startActivity(Intent(context, ArchitectArActivity::class.java).apply {
+                            putExtra(ArchitectArActivity.EXTRA_MODE, ArchitectArActivity.MODE_PAPER)
+                            putExtra(ArchitectArActivity.EXTRA_PAPER_WIDTH_CM, paperCm!!)
+                        })
+                    }
+                ) { Text("AR sobre papel") }
+            }
+            Text("AR sobre o papel depende de reconhecimento visual; plantas sem detalhes " +
+                "suficientes podem não ser detectadas. A maquete é miniaturizada conforme a folha.",
                 style = MaterialTheme.typography.bodySmall)
         }
         if (showMeasurements && current.walls.isNotEmpty()) {
