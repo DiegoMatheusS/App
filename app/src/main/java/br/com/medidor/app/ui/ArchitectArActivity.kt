@@ -19,11 +19,13 @@ import androidx.core.content.ContextCompat
 import br.com.medidor.app.data.ArchitectPlanStore
 import br.com.medidor.app.domain.ArPlacementMath
 import br.com.medidor.app.domain.Architect3dGeometry
+import br.com.medidor.app.domain.PlanImageFeatures
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.AugmentedImageDatabase
 import com.google.ar.core.Config
 import com.google.ar.core.Session
 import com.google.ar.core.exceptions.UnavailableException
+import com.google.ar.core.exceptions.ImageInsufficientQualityException
 
 /**
  * Optional ARCore experience. In paper mode the imported 2D plan is the tracked marker;
@@ -45,6 +47,7 @@ class ArchitectArActivity : ComponentActivity() {
     private var installationAsked = false
     private var permissionAsked = false
     private var lastStatus = ""
+    private var referenceLooksSparse = false
     @Volatile private var activeSession: Session? = null
 
     private val askCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -81,6 +84,19 @@ class ArchitectArActivity : ComponentActivity() {
             return
         }
 
+        // Local heuristic; ARCore is responsible for validating real image tracking.
+        if (mode == MODE_PAPER && paperBitmap != null) {
+            val preview = android.graphics.Bitmap.createScaledBitmap(paperBitmap, 96, 96, true)
+            try {
+                val pixels = IntArray(preview.width * preview.height)
+                preview.getPixels(pixels, 0, preview.width, 0, 0, preview.width, preview.height)
+                referenceLooksSparse = PlanImageFeatures.edgeFraction(
+                    pixels, preview.width, preview.height
+                ) < .012
+            } finally {
+                if (preview !== paperBitmap) preview.recycle()
+            }
+        }
         renderer = ArchitectArRenderer(this, faces, mode, paperScale?.toFloat() ?: .05f) { message ->
             showStatus(message)
         }
@@ -111,7 +127,8 @@ class ArchitectArActivity : ComponentActivity() {
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             text = if (mode == MODE_PAPER)
-                "Aponte para a planta impressa e mova devagar o celular."
+                "Aponte para a planta impressa e mova devagar o celular." +
+                    (if (referenceLooksSparse) " A imagem tem poucos detalhes; o reconhecimento pode falhar." else "")
             else "Mova a câmera até detectar a mesa. Toque para posicionar a maquete."
         }
         overlay.addView(status)
@@ -198,12 +215,16 @@ class ArchitectArActivity : ComponentActivity() {
                     surfaceRunning = true
                 }
                 showStatus(if (renderer.mode == MODE_PAPER)
-                    "Aponte para a mesma planta impressa. O papel precisa ter detalhes visuais distintos."
+                    "Enquadre a planta impressa ocupando ao menos 25% da imagem. " +
+                        (if (referenceLooksSparse) "Imagem pouco detalhada; experimente uma planta mais nítida." else "")
                 else "Mova devagar o aparelho e toque na mesa para posicionar.")
             } catch (e: Exception) {
                 newSession.close()
                 throw e
             }
+        } catch (e: ImageInsufficientQualityException) {
+            showStatus("O ARCore rejeitou a imagem por falta de detalhes. " +
+                "Importe uma planta mais nítida ou use AR na mesa.")
         } catch (e: UnavailableException) {
             showStatus("Realidade aumentada indisponível neste aparelho: ${e.localizedMessage}")
         } catch (e: Exception) {

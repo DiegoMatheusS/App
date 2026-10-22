@@ -63,6 +63,8 @@ object Architect3dGeometry {
             val floor = plan.floors[index]
             if (!floor.calibrated) continue
             val origin = FloorPlanMath.worldPointMeters(floor, PlanPoint(.5f, .5f)) ?: continue
+            val offsetX = floor.offsetXMeters.takeIf { it.isFinite() } ?: 0.0
+            val offsetY = floor.offsetYMeters.takeIf { it.isFinite() } ?: 0.0
             val zBase = if (allFloors) plan.floors.take(index).sumOf {
                 it.wallHeightMeters.takeIf { h -> h.isFinite() && h > 0.0 } ?: 0.0
             } else 0.0
@@ -78,8 +80,8 @@ object Architect3dGeometry {
                 val perpendicularX = -uy * wallThickness / 2
                 val perpendicularY = ux * wallThickness / 2
                 fun corner(distance: Double, side: Double, z: Double): Point3d =
-                    Point3d(a.first - origin.first + ux * distance + perpendicularX * side,
-                        a.second - origin.second + uy * distance + perpendicularY * side,
+                    Point3d(a.first - origin.first + offsetX + ux * distance + perpendicularX * side,
+                        a.second - origin.second + offsetY + uy * distance + perpendicularY * side,
                         zBase + z)
 
                 for (piece in wallPieces(floor, wallIndex)) {
