@@ -31,7 +31,7 @@ No Android Studio: abrir a pasta do projeto, instalar Android SDK 37 e sincroniz
 ## Roadmap
 
 1. Melhorar foto calibrada: retificação de perspectiva, zoom de precisão, galeria de imagens associadas às medições.
-2. Persistência Room, projetos/relatórios e testes instrumentados.
+2. Migrar persistência protótipo para Room, backups de projetos, relatórios e testes instrumentados.
 3. Modo Arquiteto: melhorar escala/calibração entre plantas, edição detalhada de paredes/aberturas e validação física do ARCore.
 4. Scanner 3D por fotogrametria offline, com benchmarks de hardware.
 5. Detecção/contagem de tijolos com modelo de IA local opcional.
@@ -79,3 +79,12 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - Os pontos devem estar separados por pelo menos 0,5 m em cada planta. Diferença maior que 8% entre as distâncias dos dois pontos indica **escalas inconsistentes** e bloqueia o alinhamento automático; a escala não é ajustada.
 - O formato local do projeto foi estendido mantendo os projetos anteriores sem rotação nem segundo ponto. Importar/corrigir uma planta apaga pontos de alinhamento inválidos daquela folha.
 - Ainda é um alinhamento 2D estimado: não corrige deformações na planta, não confirma pilares/escadas e **não substitui verificação física de obra**.
+
+## PR #9 — Zoom de precisão e projetos independentes
+
+- Marcação no Modo Arquiteto com zoom de 1× a 6× e deslocamento usando **dois dedos**. Imagem e cotas recebem a mesma transformação visual, para os toques continuarem associados aos pontos da planta. Botões +, − e Centralizar.
+- **Projetos locais separados:** criar, escolher, renomear, duplicar e excluir (com confirmação), até 20. Cada projeto mantém sua própria lista de andares, escalas, paredes e aberturas.
+- Compatibilidade com projetos de versões anteriores: o slot original `architect_plan_v1/plan` continua representando o projeto ativo; o gerenciamento acrescenta um índice e cópias de projetos inativos. A migração não elimina a chave de dados antiga.
+- Uma duplicação pode compartilhar referências às mesmas imagens privadas. A exclusão de um projeto **não apaga as imagens do armazenamento**, para evitar quebrar outro projeto que use a mesma foto. Limpeza de imagens órfãs exige migração futura mais cuidadosa.
+- Os projetos não possuem sincronização, login nem backup automático. Antes de dados críticos de produção, migrar para Room e implementar exportação/importação com verificação de integridade.
+- O zoom melhora a seleção manual, mas não aumenta a resolução original da foto nem torna medições geometricamente certificadas.

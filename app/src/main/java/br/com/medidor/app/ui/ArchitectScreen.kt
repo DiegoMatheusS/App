@@ -50,6 +50,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import br.com.medidor.app.data.ArchitectPlanStore
+import br.com.medidor.app.data.ArchitectProjectManager
 import br.com.medidor.app.domain.ArchitectPlan
 import br.com.medidor.app.domain.FloorPlanMath
 import br.com.medidor.app.domain.PlanFloor
@@ -70,6 +71,8 @@ import kotlin.math.min
 fun ArchitectScreen() {
     val context = LocalContext.current
     val repository = remember(context) { ArchitectPlanStore(context.applicationContext) }
+    val manager = remember(context) { ArchitectProjectManager(context.applicationContext) }
+    var activeProjectId by remember { mutableStateOf(manager.activeId()) }
     var project by remember { mutableStateOf(repository.load()) }
     var editingMode by remember { mutableStateOf("reference") }
     var pending by remember { mutableStateOf<PlanPoint?>(null) }
@@ -87,11 +90,11 @@ fun ArchitectScreen() {
 
     val selected = project.selectedFloor
     val current = project.floors[selected]
-    var referenceText by remember(selected) { mutableStateOf(current.knownMeters.toString()) }
-    var wallHeightText by remember(selected) { mutableStateOf(current.wallHeightMeters.toString()) }
-    var offsetXText by remember(selected) { mutableStateOf(current.offsetXMeters.toString()) }
-    var offsetYText by remember(selected) { mutableStateOf(current.offsetYMeters.toString()) }
-    var rotationText by remember(selected) { mutableStateOf(current.rotationDegrees.toString()) }
+    var referenceText by remember(activeProjectId, selected) { mutableStateOf(current.knownMeters.toString()) }
+    var wallHeightText by remember(activeProjectId, selected) { mutableStateOf(current.wallHeightMeters.toString()) }
+    var offsetXText by remember(activeProjectId, selected) { mutableStateOf(current.offsetXMeters.toString()) }
+    var offsetYText by remember(activeProjectId, selected) { mutableStateOf(current.offsetYMeters.toString()) }
+    var rotationText by remember(activeProjectId, selected) { mutableStateOf(current.rotationDegrees.toString()) }
 
     fun persist(next: ArchitectPlan) {
         try {
@@ -219,6 +222,17 @@ fun ArchitectScreen() {
             "O projeto é salvo offline. AR é experimental; leitura automática de plantas e PDF ainda não estão disponíveis.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
+        ArchitectProjectControls(
+            manager = manager,
+            onChanged = {
+                activeProjectId = manager.activeId()
+                project = repository.load()
+                pending = null
+                perspectiveCorners.clear()
+                editingMode = "reference"
+            },
+            onError = { error = it }
+        )
         Text("Pavimentos", style = MaterialTheme.typography.titleMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             project.floors.forEachIndexed { index, f ->
@@ -408,7 +422,7 @@ fun ArchitectScreen() {
                 },
                 color = MaterialTheme.colorScheme.primary
             )
-            FloorPlanCanvas(
+            ZoomablePlanCanvas(
                 bitmap = bitmap,
                 floor = current,
                 pending = pending,
@@ -613,7 +627,7 @@ private fun planTouch(touch: Offset, size: IntSize, bitmap: Bitmap): PlanPoint? 
 }
 
 @Composable
-private fun FloorPlanCanvas(
+internal fun FloorPlanCanvas(
     bitmap: Bitmap,
     floor: PlanFloor,
     pending: PlanPoint?,
