@@ -35,7 +35,8 @@ data class PairFeatureResult(
     val inliers: Int,
     val averageResidualPx: Double?,
     val approximateRotationDegrees: Double?,
-    val approximateScale: Double?
+    val approximateScale: Double?,
+    val epipolar: EpipolarEvidence? = null
 ) {
     val supported: Boolean get() = inliers >= 7 && tentative >= 7 &&
         inliers.toDouble() / tentative >= .4
@@ -195,7 +196,8 @@ object ScannerFeatureMatching {
         return PairFeatureResult(firstSlot, secondSlot, first.points.size,
             second.points.size, matches.size, bestInliers,
             bestAngle?.let { bestError / bestInliers.coerceAtLeast(1) },
-            bestAngle, bestScale)
+            bestAngle, bestScale,
+            ScannerEpipolarGeometry.estimate(first, second, matches))
     }
 
     /** Adjacent positions on both rings and closest nominal cross-elevation links. */

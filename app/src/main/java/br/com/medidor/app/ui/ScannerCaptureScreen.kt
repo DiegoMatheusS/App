@@ -429,8 +429,12 @@ fun ScannerCaptureScreen() {
                 report.pairs.forEach { pair ->
                     Text(
                         "Fotos ${pair.firstSlot + 1} → ${pair.secondSlot + 1}: " +
-                            "${pair.inliers}/${pair.tentative} correspondências consistentes" +
-                            if (pair.supported) " (indício positivo)" else " (inconclusivo)",
+                            "${pair.inliers}/${pair.tentative} correspondências 2D" +
+                            (if (pair.supported) " (indício positivo)" else " (inconclusivo)") +
+                            (pair.epipolar?.let { ep ->
+                                " | geometria epipolar: ${ep.inliers}/${ep.matches}" +
+                                    (if (ep.plausible) " (compatível)" else " (inconclusiva)")
+                            } ?: ""),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (pair.supported) MaterialTheme.colorScheme.onSurface
                                 else MaterialTheme.colorScheme.error
@@ -445,10 +449,10 @@ fun ScannerCaptureScreen() {
                     Text("Fotos ainda não capturadas: ${report.missingSlots.size}/20.",
                         style = MaterialTheme.typography.bodySmall)
                 }
-                Text("O método usa pontos de contraste, descritores binários e uma " +
-                    "verificação de transformação 2D. Pode falhar com mudanças fortes de ângulo, " +
-                    "objetos lisos ou sombras. Resultado positivo não mede profundidade nem " +
-                    "calcula posição 3D da câmera. Nenhuma malha é gerada.",
+                Text("Além da comparação 2D, uma verificação epipolar experimental " +
+                    "testa se os pontos são compatíveis com duas vistas. Uma matriz " +
+                    "fundamental estimada não recupera calibração, profundidade, pose 3D " +
+                    "nem garante que a cena possa ser triangulada. Nenhuma malha é gerada.",
                     style = MaterialTheme.typography.bodySmall)
             }
             Text("Selecione a posição da fotografia:", fontWeight = FontWeight.SemiBold)
