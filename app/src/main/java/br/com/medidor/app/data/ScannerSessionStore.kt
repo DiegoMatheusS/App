@@ -4,6 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import br.com.medidor.app.domain.ScannerCaptureGuide
+import br.com.medidor.app.domain.ScannerSessionArchive
+import java.io.InputStream
+import java.io.OutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -24,9 +27,10 @@ data class ScannerSession(
  * Photos are unique to their slots. No image is uploaded or sent to third parties.
  */
 class ScannerSessionStore(context: Context) {
-    private val prefs = context.applicationContext
+    private val appContext = context.applicationContext
+    private val prefs = appContext
         .getSharedPreferences("scanner_capture_v1", Context.MODE_PRIVATE)
-    private val folder = File(context.applicationContext.filesDir, "scanner").apply { mkdirs() }
+    private val folder = File(appContext.filesDir, "scanner").apply { mkdirs() }
 
     @Synchronized fun list(): List<ScannerSession> {
         val json = prefs.getString("sessions", "[]") ?: "[]"
@@ -127,6 +131,58 @@ class ScannerSessionStore(context: Context) {
             ?: throw IllegalArgumentException("Sessão não encontrada.")
         persist(sessions.filterNot { it.id == id })
         session.frames.values.forEach { safeFile(it)?.delete() }
+    }
+
+    /** Export a single session without modifying any saved photographs. */
+    @Synchronized fun exportSession(id: String, output: OutputStream) {
+        val session = list().firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Sessão não encontrada.")
+        val photos = session.frames.mapValues { (_, name) ->
+            requireNotNull(safeFile(name)) { "Imagem inválida." }
+        }
+        ScannerSessionArchive.write(session.name, photos, output)
+    }
+
+    /**
+     * Restore a ZIP as a separate new session, never overwriting existing data.
+     * Validate hashes, ZIP paths and all JPEG dimensions before installing.
+     */
+    @Synchronized fun importSession(source: InputStream): ScannerSession {
+        val staging = File(appContext.cacheDir, "scanner_restore_${UUID.randomUUID()}")
+        check(staging.mkdirs()) { "Falha ao criar diretório temporário." }
+        val createdFiles = mutableListOf<File>()
+        try {
+            val restored = ScannerSessionArchive.read(source, staging)
+            val existing = list()
+            require(existing.size < ScannerCaptureGuide.MAX_SESSIONS) {
+                "Limite de sessões atingido. Exclua uma sessão antes de importar."
+            }
+            for (photo in restored.frames.values) {
+                val dimensions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(photo.absolutePath, dimensions)
+                require(dimensions.outWidth in 1..4096 && dimensions.outHeight in 1..4096) {
+                    "Foto JPEG inválida ou com resolução acima de 4096 px."
+                }
+            }
+            val frames = restored.frames.mapValues { (_, sourcePhoto) ->
+                val name = "scan_${UUID.randomUUID()}.jpg"
+                val file = File(folder, name)
+                createdFiles += file
+                sourcePhoto.copyTo(file)
+                name
+            }
+            val result = ScannerSession(
+                UUID.randomUUID().toString(), restored.name,
+                System.currentTimeMillis(), frames
+            )
+            persist(listOf(result) + existing)
+            return result
+        } catch (e: Exception) {
+            createdFiles.forEach { it.delete() }
+            throw e
+        } finally {
+            staging.deleteRecursively()
+        }
     }
 
     fun thumbnail(fileName: String?): Bitmap? {
