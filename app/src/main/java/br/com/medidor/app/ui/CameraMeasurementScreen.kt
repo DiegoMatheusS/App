@@ -326,6 +326,13 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
             } else null
             val referenceIsReadable = referencePixels != null &&
                 ReferenceMarkQuality.isReadable(referencePixels)
+            if (referencePixels != null &&
+                ReferenceMarkQuality.needsLargerReference(referencePixels)) {
+                Text("Referência utilizável, mas curta na fotografia. " +
+                    "Para reduzir a sensibilidade a erros de toque, prefira " +
+                    "uma referência com pelo menos 50 pixels de comprimento.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (referencePixels != null && !referenceIsReadable) {
                 Text("Referência muito pequena na foto (menos de 20 pixels). " +
                     "Aproxime a câmera ou marque uma referência maior para reduzir " +
