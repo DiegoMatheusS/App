@@ -57,6 +57,8 @@ import br.com.medidor.app.domain.BrazilianCoin
 import br.com.medidor.app.domain.LengthUnit
 import br.com.medidor.app.domain.NormalizedPoint
 import br.com.medidor.app.domain.PhotoCalibration
+import br.com.medidor.app.domain.PlanarContourSegmentation
+import br.com.medidor.app.domain.PlanarContourResult
 import java.io.File
 import kotlin.math.min
 
@@ -79,6 +81,9 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
     var coin by remember { mutableStateOf(BrazilianCoin.TWENTY_FIVE_CENTS) }
     var mode by remember { mutableStateOf("coin") }
     var manualSize by remember { mutableStateOf("10") }
+    var measureStyle by remember { mutableStateOf("distance") }
+    var seed by remember { mutableStateOf<NormalizedPoint?>(null) }
+    var tolerance by remember { mutableStateOf(32) }
     var manualUnit by remember { mutableStateOf(LengthUnit.CENTIMETERS) }
     var screenError by remember { mutableStateOf<String?>(null) }
     val points = remember { mutableStateListOf<NormalizedPoint>() }
@@ -88,6 +93,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
             try {
                 bitmap = SampledPhotos.fromUri(context.contentResolver, uri)
                 points.clear()
+                seed = null
                 saved = false
                 screenError = null
             } catch (e: Exception) {
@@ -106,7 +112,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
             OutlinedButton(onClick = { pickPhoto.launch("image/*") }) { Text("Escolher foto da galeria") }
             if (granted) {
                 CameraPreviewAndCapture(
-                    onPhoto = { bitmap = it; points.clear(); saved = false; screenError = null },
+                    onPhoto = { bitmap = it; points.clear(); seed = null; saved = false; screenError = null },
                     onError = { error -> screenError = error }
                 )
             } else {
@@ -117,7 +123,16 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
             }
         } else {
             val photo = bitmap!!
-            Text("1. Referência para a escala:", fontWeight = FontWeight.Medium)
+            Text("1. Tipo de medição:", fontWeight = FontWeight.Medium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = measureStyle == "distance", onClick = {
+                    measureStyle = "distance"; points.clear(); seed = null; saved = false
+                }, label = { Text("Distância manual") })
+                FilterChip(selected = measureStyle == "contour", onClick = {
+                    measureStyle = "contour"; points.clear(); seed = null; saved = false
+                }, label = { Text("Contorno por toque") })
+            }
+            Text("2. Referência para a escala:", fontWeight = FontWeight.Medium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = mode == "coin", onClick = {
                     mode = "coin"; points.clear(); saved = false
@@ -155,6 +170,40 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                     }
                 }
             }
+            val contour = remember(photo, seed, tolerance, measureStyle) {
+                if (measureStyle != "contour" || seed == null) null
+                else {
+                    val w = 256
+                    val h = (256f * photo.height / photo.width)
+                        .toInt().coerceIn(8, 256)
+                    val resized = Bitmap.createScaledBitmap(photo, w, h, true)
+                    try {
+                        val pixels = IntArray(w * h)
+                        resized.getPixels(pixels, 0, w, 0, 0, w, h)
+                        PlanarContourSegmentation.segment(
+                            pixels, w, h,
+                            (seed!!.x * (w - 1)).toInt().coerceIn(0,w-1),
+                            (seed!!.y * (h - 1)).toInt().coerceIn(0,h-1),
+                            tolerance
+                        )
+                    } finally {
+                        if (resized !== photo) resized.recycle()
+                    }
+                }
+            }
+            if (measureStyle == "contour") {
+                Text("Após marcar dois pontos da referência, toque dentro do objeto " +
+                    "para selecionar a região de cor semelhante.",
+                    style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(18 to "Mais restrito", 32 to "Normal", 55 to "Mais amplo")
+                        .forEach { (value, label) ->
+                            FilterChip(selected = tolerance == value, onClick = {
+                                tolerance = value; saved = false
+                            }, label = { Text(label) })
+                        }
+                }
+            }
             Box(Modifier.fillMaxWidth().height(340.dp)) {
                 Image(
                     bitmap = photo.asImageBitmap(),
@@ -167,7 +216,11 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                         detectTapGestures { touch ->
                             val mapped = photoPointFromTouch(touch, size, photo.width, photo.height)
                             if (mapped != null && points.size < 4) {
-                                points.add(mapped)
+                                if (measureStyle == "contour" && points.size >= 2) {
+                                    seed = mapped
+                                } else if (points.size < (if (measureStyle == "contour") 2 else 4)) {
+                                    points.add(mapped)
+                                }
                                 saved = false
                             }
                         }
@@ -189,6 +242,25 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                             Offset(rect.left + rect.width * b.x, rect.top + rect.height * b.y),
                             strokeWidth = 3.dp.toPx())
                     }
+
+                    if (measureStyle == "contour" && contour != null) {
+                        val c = contour!!
+                        c.outline.forEach { px ->
+                            drawCircle(
+                                Color(0xFF48F1AE), 1.3.dp.toPx(),
+                                Offset(rect.left + rect.width * (px.x.toFloat()/c.width),
+                                    rect.top + rect.height * (px.y.toFloat()/c.height))
+                            )
+                        }
+                        val x0=rect.left+rect.width*c.minX/c.width
+                        val x1=rect.left+rect.width*(c.maxX+1)/c.width
+                        val y0=rect.top+rect.height*c.minY/c.height
+                        val y1=rect.top+rect.height*(c.maxY+1)/c.height
+                        drawLine(Color(0xFF48F1AE), Offset(x0,y0),Offset(x1,y0),2.dp.toPx())
+                        drawLine(Color(0xFF48F1AE), Offset(x1,y0),Offset(x1,y1),2.dp.toPx())
+                        drawLine(Color(0xFF48F1AE), Offset(x1,y1),Offset(x0,y1),2.dp.toPx())
+                        drawLine(Color(0xFF48F1AE), Offset(x0,y1),Offset(x0,y0),2.dp.toPx())
+                    }
                     if (points.size >= 4) {
                         val a = points[2]; val b = points[3]
                         drawLine(Color(0xFF4EE0C1),
@@ -198,11 +270,13 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                     }
                 }
             }
-            val prompt = when (points.size) {
-                0 -> "2. Marque o início da referência."
-                1 -> "3. Marque o fim da referência."
-                2 -> "4. Toque no ponto inicial do objeto."
-                3 -> "5. Toque no ponto final do objeto."
+            val prompt = when {
+                points.isEmpty() -> "Marque o primeiro ponto da referência."
+                points.size == 1 -> "Marque o segundo ponto da referência."
+                measureStyle == "contour" && seed == null -> "Toque dentro do objeto para tentar detectar o contorno."
+                measureStyle == "contour" -> "Confira o contorno estimado e as dimensões."
+                points.size == 2 -> "Toque no início da distância."
+                points.size == 3 -> "Toque no fim da distância."
                 else -> "Medição concluída. Confira os pontos."
             }
             Text(prompt, fontWeight = FontWeight.Medium)
@@ -217,6 +291,36 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                 if (reference > 0.0) PhotoCalibration.millimetersFromReference(
                     referenceMm, reference, target) else null
             } else null
+            if (measureStyle == "contour" && seed != null && contour == null) {
+                Text("Região não isolada. Escolha outro ponto ou ajuste a tolerância. " +
+                    "O fundo pode ter cor semelhante ao objeto.",
+                    color = MaterialTheme.colorScheme.error)
+            }
+            if (measureStyle == "contour" && contour != null && points.size >= 2 &&
+                referenceMm != null) {
+                val reference = PhotoCalibration.distancePixels(
+                    points[0], points[1], photo.width, photo.height
+                )
+                val widthMm = if (reference > 0) PhotoCalibration.millimetersFromReference(
+                    referenceMm, reference, contour.widthFraction * photo.width
+                ) else null
+                val heightMm = if (reference > 0) PhotoCalibration.millimetersFromReference(
+                    referenceMm, reference, contour.heightFraction * photo.height
+                ) else null
+                if (widthMm != null && heightMm != null) {
+                    ResultCard("Contorno no plano (estimado)",
+                        "Largura: ${decimal(widthMm/10)} cm • Altura: ${decimal(heightMm/10)} cm")
+                    Button(onClick = {
+                        onSave("Contorno por fotografia",
+                            "Largura ${decimal(widthMm)} mm | Altura ${decimal(heightMm)} mm (mesmo plano)")
+                        saved = true
+                    }) { Text("Salvar dimensões do contorno") }
+                }
+                Text("Contorno por semelhança de cor, sem reconhecimento semântico. " +
+                    "As dimensões só são válidas para objeto e referência no mesmo plano; " +
+                    "não mede profundidade, curvas 3D nem objetos afastados.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
             if (points.size == 4 && mm == null && referenceMm != null) {
                 Text("A referência precisa ter dois pontos diferentes.", color = MaterialTheme.colorScheme.error)
             }
@@ -234,10 +338,10 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                     Text("Desfazer último ponto")
                 }
             }
-            OutlinedButton(onClick = { points.clear(); saved = false }) {
+            OutlinedButton(onClick = { points.clear(); seed = null; saved = false }) {
                 Text("Recomeçar marcações")
             }
-            OutlinedButton(onClick = { bitmap = null; points.clear(); saved = false }) {
+            OutlinedButton(onClick = { bitmap = null; points.clear(); seed = null; saved = false }) {
                 Text("Escolher outra imagem")
             }
         }
