@@ -32,7 +32,7 @@ No Android Studio: abrir a pasta do projeto, instalar Android SDK 37 e sincroniz
 
 1. Melhorar foto calibrada: retificação de perspectiva, zoom de precisão, galeria de imagens associadas às medições.
 2. Persistência Room, projetos/relatórios e testes instrumentados.
-3. Modo Arquiteto: alinhar rotação/escala entre andares, edição detalhada de paredes/aberturas e validação física do ARCore.
+3. Modo Arquiteto: melhorar escala/calibração entre plantas, edição detalhada de paredes/aberturas e validação física do ARCore.
 4. Scanner 3D por fotogrametria offline, com benchmarks de hardware.
 5. Detecção/contagem de tijolos com modelo de IA local opcional.
 6. Pro Completo: implementar Google Play Billing, validação e restauração real da compra única.
@@ -70,3 +70,12 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - **Alinhamento por um ponto arquitetônico:** tocar em um ponto correspondente no térreo e no andar superior, com escalas previamente definidas, para calcular os deslocamentos X/Y automaticamente. Ajustes manuais continuam disponíveis. Um ponto determina a translação, **não** corrige diferença de rotação ou escala entre plantas.
 - Os pontos são persistidos nos projetos locais com compatibilidade com arquivos anteriores; testes cobrem o quadrilátero, proporção de saída, orientação, pontos inválidos e deslocamentos.
 - A conversão continua sendo **uma estimativa** baseada na qualidade da planta e da calibração; não é aferição de obra nem medição certificada.
+
+## PR #8 — Alinhamento de dois pontos e rotação
+- Escolha dois pontos **correspondentes** no térreo e no outro pavimento usando os modos **Ponto 1** e **Ponto 2**. Cada planta precisa estar calibrada.
+- **Alinhar posição e rotação (2 pontos)** calcula um ângulo e os deslocamentos X/Y, aplicados igualmente à prévia 3D e à representação AR.
+- **Alinhar só posição (1 ponto)** continua funcionando, agora respeitando a rotação manual de cada pavimento.
+- **Rotação manual** disponível de -180° a +180°; centralizar restaura rotação e translação a zero.
+- Os pontos devem estar separados por pelo menos 0,5 m em cada planta. Diferença maior que 8% entre as distâncias dos dois pontos indica **escalas inconsistentes** e bloqueia o alinhamento automático; a escala não é ajustada.
+- O formato local do projeto foi estendido mantendo os projetos anteriores sem rotação nem segundo ponto. Importar/corrigir uma planta apaga pontos de alinhamento inválidos daquela folha.
+- Ainda é um alinhamento 2D estimado: não corrige deformações na planta, não confirma pilares/escadas e **não substitui verificação física de obra**.
