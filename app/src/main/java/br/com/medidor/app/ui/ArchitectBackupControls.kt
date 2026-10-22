@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.dp
 import br.com.medidor.app.data.ArchitectBackupManager
 import br.com.medidor.app.data.ArchitectPlanStore
 import br.com.medidor.app.domain.ObjModelExporter
+import br.com.medidor.app.domain.ReportContent
+import br.com.medidor.app.data.PdfReportExporter
+import br.com.medidor.app.data.ArchitectProjectManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,6 +69,28 @@ internal fun ArchitectBackupControls(onRestored: () -> Unit) {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null && !busy) importing = uri
+    }
+    val saveProjectPdf = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri != null && !busy) scope.launch {
+            busy = true
+            try {
+                val pageCount = withContext(Dispatchers.IO) {
+                    val project = plans.load()
+                    val manager = ArchitectProjectManager(context.applicationContext)
+                    val name = manager.list().first { it.id == manager.activeId() }.name
+                    val out = context.contentResolver.openOutputStream(uri)
+                        ?: error("Não foi possível escrever o relatório PDF.")
+                    PdfReportExporter.write(ReportContent.architect(name, project), out)
+                }
+                message = "Relatório do projeto salvo em PDF ($pageCount página(s))."
+            } catch (e: Exception) {
+                message = "Falha na exportação PDF: ${e.localizedMessage}"
+            } finally {
+                busy = false
+            }
+        }
     }
     val saveObj = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -145,6 +170,9 @@ internal fun ArchitectBackupControls(onRestored: () -> Unit) {
         OutlinedButton(enabled = !busy, onClick = {
             saveObj.launch("maquete-medidor.obj")
         }) { Text("Exportar maquete 3D (.obj)") }
+        OutlinedButton(enabled = !busy, onClick = {
+            saveProjectPdf.launch("medidor-relatorio-arquiteto.pdf")
+        }) { Text("Exportar relatório do projeto (PDF)") }
         Text("A exportação OBJ contém somente a geometria dos pavimentos do projeto atual. " +
             "Ela não é um scanner 3D nem um modelo CAD certificado.",
             style = MaterialTheme.typography.bodySmall)
