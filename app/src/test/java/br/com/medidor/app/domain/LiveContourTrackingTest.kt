@@ -19,6 +19,20 @@ class LiveContourTrackingTest {
         assertNull(LiveContourTracking.check(contour(10,10),contour(105,70)).result)
         assertNull(LiveContourTracking.check(contour(60,40),contour(50,25,60,65)).result)
     }
+    @Test fun followsModeratelyMovingContourWithinBounds() {
+        val prior=contour(60,40)
+        val next=contour(68,46)
+        val from=NormalizedPoint(.43f,.42f)
+        val seed=LiveContourTracking.followSeed(prior,next,from)!!
+        assertEquals(.48f,seed.x,.0001f)
+        assertEquals(.47f,seed.y,.0001f)
+    }
+
+    @Test fun refusesToFollowLostObject() {
+        assertNull(LiveContourTracking.followSeed(contour(10,10),contour(105,70),
+            NormalizedPoint(.15f,.15f)))
+    }
+
     @Test fun doesNotInventMeasurementsOrKeepStaleContourWhenLost() {
         assertNull(LiveContourTracking.check(contour(50,50),null).result)
         assertNotNull(LiveContourTracking.check(null,contour(50,50)).result)
