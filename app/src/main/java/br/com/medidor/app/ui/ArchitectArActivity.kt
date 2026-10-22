@@ -24,7 +24,6 @@ import com.google.ar.core.AugmentedImageDatabase
 import com.google.ar.core.Config
 import com.google.ar.core.Session
 import com.google.ar.core.exceptions.UnavailableException
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Optional ARCore experience. In paper mode the imported 2D plan is the tracked marker;
@@ -218,7 +217,7 @@ class ArchitectArActivity : ComponentActivity() {
             surfaceRunning = false
         }
         val s = activeSession
-        renderer.takeIf { ::renderer.isInitialized }?.session = null
+        if (::renderer.isInitialized) renderer.session = null
         activeSession = null
         try { s?.pause() } catch (_: Exception) { }
         s?.close()
