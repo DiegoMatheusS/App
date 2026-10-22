@@ -61,7 +61,8 @@ class ArchitectPlanStore(private val context: Context) {
                 walls = walls,
                 openings = openings,
                 offsetXMeters = f.optDouble("offsetXMeters", 0.0).takeIf { it.isFinite() } ?: 0.0,
-                offsetYMeters = f.optDouble("offsetYMeters", 0.0).takeIf { it.isFinite() } ?: 0.0
+                offsetYMeters = f.optDouble("offsetYMeters", 0.0).takeIf { it.isFinite() } ?: 0.0,
+                alignmentPoint = f.optJSONObject("alignmentPoint")?.let(::point)
             )
         }
         if (floors.isEmpty()) ArchitectPlan() else ArchitectPlan(
@@ -75,7 +76,7 @@ class ArchitectPlanStore(private val context: Context) {
     fun save(plan: ArchitectPlan) {
         require(plan.floors.isNotEmpty())
         val obj = JSONObject().apply {
-            put("version", 3)
+            put("version", 4)
             put("selected", plan.selectedFloor)
             put("floors", JSONArray().also { arr ->
                 plan.floors.forEach { f ->
@@ -88,6 +89,7 @@ class ArchitectPlanStore(private val context: Context) {
                         put("wallHeightMeters", f.wallHeightMeters)
                         put("offsetXMeters", f.offsetXMeters)
                         put("offsetYMeters", f.offsetYMeters)
+                        if (f.alignmentPoint != null) put("alignmentPoint", pointJson(f.alignmentPoint))
                         if (f.referenceStart != null) put("refA", pointJson(f.referenceStart))
                         if (f.referenceEnd != null) put("refB", pointJson(f.referenceEnd))
                         put("walls", JSONArray().also { walls ->

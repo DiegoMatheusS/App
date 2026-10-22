@@ -41,7 +41,8 @@ data class PlanFloor(
     val walls: List<PlanWall> = emptyList(),
     val openings: List<PlanOpening> = emptyList(),
     val offsetXMeters: Double = 0.0,
-    val offsetYMeters: Double = 0.0
+    val offsetYMeters: Double = 0.0,
+    val alignmentPoint: PlanPoint? = null
 ) {
     val calibrated: Boolean get() = FloorPlanMath.pixelsPerMeter(this) != null
 }
