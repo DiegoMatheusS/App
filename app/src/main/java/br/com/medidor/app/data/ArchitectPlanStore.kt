@@ -8,6 +8,8 @@ import br.com.medidor.app.domain.ArchitectPlan
 import br.com.medidor.app.domain.PlanFloor
 import br.com.medidor.app.domain.PlanPoint
 import br.com.medidor.app.domain.PlanWall
+import br.com.medidor.app.domain.PlanOpening
+import br.com.medidor.app.domain.OpeningType
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -33,6 +35,20 @@ class ArchitectPlanStore(private val context: Context) {
                 val wall = wallsJson.getJSONObject(j)
                 PlanWall(point(wall.getJSONObject("a"))!!, point(wall.getJSONObject("b"))!!)
             }
+            val openingsJson = f.optJSONArray("openings") ?: JSONArray()
+            val openings = (0 until openingsJson.length()).mapNotNull { j ->
+                runCatching {
+                    val op = openingsJson.getJSONObject(j)
+                    PlanOpening(
+                        wallIndex = op.getInt("wall"),
+                        type = OpeningType.valueOf(op.getString("type")),
+                        centerFraction = op.getDouble("center"),
+                        widthMeters = op.getDouble("width"),
+                        sillMeters = op.getDouble("sill"),
+                        heightMeters = op.getDouble("height")
+                    )
+                }.getOrNull()
+            }
             PlanFloor(
                 title = f.optString("title", "Andar ${i + 1}"),
                 imageFile = f.optString("image").ifBlank { null },
@@ -42,7 +58,8 @@ class ArchitectPlanStore(private val context: Context) {
                 referenceStart = f.optJSONObject("refA")?.let(::point),
                 referenceEnd = f.optJSONObject("refB")?.let(::point),
                 wallHeightMeters = f.optDouble("wallHeightMeters", 2.7),
-                walls = walls
+                walls = walls,
+                openings = openings
             )
         }
         if (floors.isEmpty()) ArchitectPlan() else ArchitectPlan(
@@ -56,7 +73,7 @@ class ArchitectPlanStore(private val context: Context) {
     fun save(plan: ArchitectPlan) {
         require(plan.floors.isNotEmpty())
         val obj = JSONObject().apply {
-            put("version", 1)
+            put("version", 2)
             put("selected", plan.selectedFloor)
             put("floors", JSONArray().also { arr ->
                 plan.floors.forEach { f ->
@@ -74,6 +91,18 @@ class ArchitectPlanStore(private val context: Context) {
                                 walls.put(JSONObject().apply {
                                     put("a", pointJson(wall.start))
                                     put("b", pointJson(wall.end))
+                                })
+                            }
+                        })
+                        put("openings", JSONArray().also { openings ->
+                            f.openings.forEach { op ->
+                                openings.put(JSONObject().apply {
+                                    put("wall", op.wallIndex)
+                                    put("type", op.type.name)
+                                    put("center", op.centerFraction)
+                                    put("width", op.widthMeters)
+                                    put("sill", op.sillMeters)
+                                    put("height", op.heightMeters)
                                 })
                             }
                         })
