@@ -1,6 +1,7 @@
 package br.com.medidor.app.ui
 
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -87,6 +88,9 @@ fun ArchitectScreen() {
     var sheetHeight by rememberSaveable { mutableStateOf("29,7") }
     val perspectiveCorners = remember { mutableStateListOf<PlanPoint>() }
     var error by remember { mutableStateOf<String?>(null) }
+    var selectedPdf by remember { mutableStateOf<Uri?>(null) }
+    var pdfPages by remember { mutableStateOf(0) }
+    var pdfPageText by remember { mutableStateOf("1") }
 
     val selected = project.selectedFloor
     val current = project.floors[selected]
@@ -140,6 +144,84 @@ fun ArchitectScreen() {
                 error = "Falha ao importar planta: ${e.localizedMessage}"
             }
         }
+    }
+
+    fun saveImportedDrawing(image: Bitmap) {
+        try {
+            val name = repository.saveImage(image)
+            editFloor(current.copy(
+                imageFile = name, imageWidth = image.width, imageHeight = image.height,
+                referenceStart = null, referenceEnd = null,
+                walls = emptyList(), openings = emptyList(),
+                alignmentPoint = null, secondAlignmentPoint = null
+            ))
+            editingMode = "reference"
+            pending = null
+            perspectiveCorners.clear()
+        } finally {
+            image.recycle()
+        }
+    }
+
+    val openPdf = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) try {
+            pdfPages = ArchitectDocumentImport.pageCount(context.contentResolver, uri)
+            require(pdfPages > 0) { "PDF sem páginas." }
+            selectedPdf = uri
+            pdfPageText = "1"
+        } catch (e: Exception) {
+            error = "Não foi possível abrir PDF: ${e.localizedMessage}"
+        }
+    }
+    val openDxf = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) try {
+            saveImportedDrawing(ArchitectDocumentImport.dxf(context.contentResolver, uri))
+        } catch (e: Exception) {
+            error = "Não foi possível importar DXF: ${e.localizedMessage}"
+        }
+    }
+
+    if (selectedPdf != null) {
+        AlertDialog(
+            onDismissRequest = { selectedPdf = null },
+            title = { Text("Escolher página da planta") },
+            text = {
+                Column {
+                    Text("O PDF possui $pdfPages páginas. Escolha a página que contém a planta.")
+                    OutlinedTextField(
+                        value = pdfPageText, onValueChange = { pdfPageText = it },
+                        label = { Text("Página (1 a $pdfPages)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    Text("A página será convertida em imagem. Marque as paredes e calibre a escala " +
+                        "para criar a maquete 3D.", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = pdfPageText.toIntOrNull()?.let { it in 1..pdfPages } == true,
+                    onClick = {
+                        val uri = selectedPdf
+                        selectedPdf = null
+                        if (uri != null) try {
+                            saveImportedDrawing(ArchitectDocumentImport.pdfPage(
+                                context.contentResolver, uri, pdfPageText.toInt() - 1
+                            ))
+                        } catch (e: Exception) {
+                            error = "Falha ao converter página: ${e.localizedMessage}"
+                        }
+                    }
+                ) { Text("Importar página") }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedPdf = null }) { Text("Cancelar") }
+            }
+        )
     }
 
     fun rectifySelectedPlan() {
@@ -219,7 +301,7 @@ fun ArchitectScreen() {
         Text("Editor de plantas — prévia", style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold)
         Text("Importe uma planta vista de cima, marque uma referência real e desenhe as paredes tocando nos extremos. " +
-            "O projeto é salvo offline. AR é experimental; leitura automática de plantas e PDF ainda não estão disponíveis.",
+            "O projeto é salvo offline. AR é experimental. PDF e DXF podem ser usados como referência para modelagem manual.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         ArchitectProjectControls(
@@ -369,6 +451,18 @@ fun ArchitectScreen() {
         OutlinedButton(onClick = { openImage.launch("image/*") }) {
             Text(if (current.imageFile == null) "Importar planta (imagem)" else "Trocar planta deste andar")
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { openPdf.launch(arrayOf("application/pdf")) }) {
+                Text("Importar PDF")
+            }
+            OutlinedButton(onClick = {
+                openDxf.launch(arrayOf("application/dxf", "image/vnd.dxf", "application/octet-stream", "text/plain"))
+            }) { Text("Importar DXF") }
+        }
+        Text("PDF: selecione uma página. DXF: importa linhas de desenho ASCII como referência. " +
+            "Para gerar 3D, marque as paredes, calibre a escala e informe as alturas. " +
+            "DWG, IFC e RVT ainda não são aceitos.",
+            style = MaterialTheme.typography.bodySmall)
         val bitmap = remember(current.imageFile) { repository.readImage(current.imageFile) }
         if (bitmap != null) {
             Text("Escala: informe uma medida conhecida na planta (metros).")

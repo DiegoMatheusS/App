@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import br.com.medidor.app.domain.Geometry
 import br.com.medidor.app.domain.TankCalculator
 import br.com.medidor.app.domain.TankShape
+import br.com.medidor.app.domain.TankLevelUnit
+import br.com.medidor.app.domain.TankFillInput
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -93,17 +95,27 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
     var diameter by rememberSaveable { mutableStateOf("8") }
     var size by rememberSaveable { mutableStateOf("12") }
     var level by rememberSaveable { mutableStateOf("5") }
+    var levelUnit by rememberSaveable { mutableStateOf(TankLevelUnit.METERS.name) }
+    var densityText by rememberSaveable { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
     val selected = TankShape.valueOf(shape)
     val d = parseDimension(diameter)
     val s = if (selected == TankShape.SPHERE) d else parseDimension(size)
-    val lv = parseLevel(level)
+    val levelValue = parseLevel(level)
     val maxLevel = if (selected == TankShape.VERTICAL) s else d
-    val valid = d != null && s != null && lv != null && maxLevel != null && lv <= maxLevel
+    val unit = TankLevelUnit.valueOf(levelUnit)
+    val lv = if (levelValue != null && maxLevel != null)
+        TankFillInput.heightMeters(levelValue, unit, maxLevel) else null
+    val valid = d != null && s != null && lv != null
     val result = if (valid) TankCalculator.calculate(selected, d!!, s!!, lv!!) else null
+    val density = densityText.trim().replace(',', '.').toDoubleOrNull()
+    val densityValid = densityText.isBlank() ||
+        (density != null && density.isFinite() && density in 0.01..30000.0)
+    val productMass = if (densityValid && result != null && density != null)
+        TankFillInput.estimatedMassKg(result.occupiedM3, density) else null
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Geometria do reservatório", style = MaterialTheme.typography.titleLarge)
+        Text("Quantidade armazenada no tanque", style = MaterialTheme.typography.titleLarge)
         Text("Use dimensões INTERNAS em metros. Tanques ideais, sem acessórios e sem perdas.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         TankShape.entries.forEach { option ->
@@ -118,21 +130,58 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
             DimensionField(if (selected == TankShape.VERTICAL) "Altura útil (m)" else "Comprimento interno (m)",
                 size) { size = it; saved = false }
         }
-        DimensionField("Nível do líquido a partir do fundo (m)", level) { level = it; saved = false }
+        Text("Altura atual do líquido ou produto, medida a partir do fundo:",
+            style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TankLevelUnit.entries.forEach { choice ->
+                FilterChip(selected = choice.name == levelUnit, onClick = {
+                    levelUnit = choice.name
+                    level = when(choice) {
+                        TankLevelUnit.METERS -> if (lv != null) decimal(lv) else "0"
+                        TankLevelUnit.CENTIMETERS -> if (lv != null) decimal(lv*100) else "0"
+                        TankLevelUnit.HEIGHT_PERCENT -> if (lv != null && maxLevel != null)
+                            decimal(lv/maxLevel*100) else "0"
+                    }
+                    saved = false
+                }, label = { Text(choice.label) })
+            }
+        }
+        DimensionField("Nível a partir do fundo (${unit.label})", level) {
+            level = it; saved = false
+        }
+        DimensionField("Densidade aparente (kg/m³, opcional)", densityText) {
+            densityText = it; saved = false
+        }
+        Text("Informe a densidade aparente do produto para estimar também a massa. " +
+            "Para sólidos a granel, superfície irregular e compactação podem alterar a estimativa.",
+            style = MaterialTheme.typography.bodySmall)
         if (!valid) {
-            Text("Verifique as medidas. O nível deve ficar entre zero e ${maxLevel?.let(::decimal) ?: "a altura"} m.",
+            Text("Verifique as medidas. O nível deve ficar entre zero e a altura total " +
+                "(${maxLevel?.let(::decimal) ?: "—"} m).",
                 color = MaterialTheme.colorScheme.error)
         } else {
             ResultCard("Capacidade geométrica", "${decimal(result!!.capacityM3)} m³ • ${decimal(Geometry.liters(result.capacityM3))} L")
-            ResultCard("Volume ocupado", "${decimal(result.occupiedM3)} m³ • ${decimal(Geometry.liters(result.occupiedM3))} L")
-            ResultCard("Disponível", "${decimal(result.freeM3)} m³ • ${decimal(result.fillPercent)}% preenchido")
+            ResultCard("Volume do produto até ${decimal(lv!!)} m",
+                "${decimal(result.occupiedM3)} m³ • ${decimal(Geometry.liters(result.occupiedM3))} L")
+            ResultCard("Espaço livre",
+                "${decimal(result.freeM3)} m³ • ${decimal(Geometry.liters(result.freeM3))} L")
+            ResultCard("Ocupação", "${decimal(result.fillPercent)}% do volume total")
+            if (productMass != null) ResultCard("Massa estimada", "${decimal(productMass)} kg")
+            if (!densityValid) Text("Informe uma densidade válida de 0,01 a 30.000 kg/m³.",
+                color = MaterialTheme.colorScheme.error)
         }
-        Button(enabled = valid, onClick = {
-            onSave(selected.label, "Capacidade: ${decimal(result!!.capacityM3)} m³ | Ocupado: ${decimal(result.occupiedM3)} m³")
+        Button(enabled = valid && densityValid, onClick = {
+            onSave(selected.label, "Capacidade: ${decimal(result!!.capacityM3)} m³ | " +
+                "Produto: ${decimal(result.occupiedM3)} m³ (${decimal(Geometry.liters(result.occupiedM3))} L) | " +
+                "Nível: ${decimal(lv!!)} m" +
+                (if (productMass != null) " | Massa estimada: ${decimal(productMass)} kg" else ""))
             saved = true
         }) { Text("Salvar cálculo") }
         if (saved) Text("Cálculo salvo neste aparelho.", color = MaterialTheme.colorScheme.primary)
-        Text("Não utilizar como laudo de arqueação ou medição fiscal de tanque.",
+        Text("Cálculo para geometria interna ideal; não considera fundo irregular, " +
+            "teto, tubulações ou volume morto. Percentual da altura não é igual ao " +
+            "percentual do volume nos tanques esféricos e horizontais. " +
+            "Não substituir arqueação certificada.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
