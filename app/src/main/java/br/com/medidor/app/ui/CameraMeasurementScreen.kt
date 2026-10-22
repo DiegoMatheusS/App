@@ -78,6 +78,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
         granted = it
     }
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var cameraMode by remember { mutableStateOf("photo") }
     var coin by remember { mutableStateOf(BrazilianCoin.TWENTY_FIVE_CENTS) }
     var mode by remember { mutableStateOf("coin") }
     var manualSize by remember { mutableStateOf("10") }
@@ -109,12 +110,46 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
         Text("Calibre com uma moeda ou distância conhecida no MESMO PLANO da medida.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (bitmap == null) {
-            OutlinedButton(onClick = { pickPhoto.launch("image/*") }) { Text("Escolher foto da galeria") }
-            if (granted) {
-                CameraPreviewAndCapture(
-                    onPhoto = { bitmap = it; points.clear(); seed = null; saved = false; screenError = null },
-                    onError = { error -> screenError = error }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = cameraMode == "photo",
+                    onClick = { cameraMode = "photo"; screenError = null },
+                    label = { Text("Fotografia") }
                 )
+                FilterChip(
+                    selected = cameraMode == "live",
+                    onClick = { cameraMode = "live"; screenError = null },
+                    label = { Text("Contorno ao vivo") }
+                )
+            }
+            OutlinedButton(onClick = { pickPhoto.launch("image/*") }) {
+                Text("Escolher foto da galeria")
+            }
+            if (granted) {
+                if (cameraMode == "live") {
+                    LiveContourCamera(
+                        onPhoto = {
+                            bitmap = it
+                            measureStyle = "contour"
+                            points.clear()
+                            seed = null
+                            saved = false
+                            screenError = null
+                        },
+                        onError = { error -> screenError = error }
+                    )
+                } else {
+                    CameraPreviewAndCapture(
+                        onPhoto = {
+                            bitmap = it
+                            points.clear()
+                            seed = null
+                            saved = false
+                            screenError = null
+                        },
+                        onError = { error -> screenError = error }
+                    )
+                }
             } else {
                 Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) {
                     Text("Permitir câmera")
@@ -135,10 +170,10 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
             Text("2. Referência para a escala:", fontWeight = FontWeight.Medium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = mode == "coin", onClick = {
-                    mode = "coin"; points.clear(); saved = false
+                    mode = "coin"; points.clear(); seed = null; saved = false
                 }, label = { Text("Moeda") })
                 FilterChip(selected = mode == "manual", onClick = {
-                    mode = "manual"; points.clear(); saved = false
+                    mode = "manual"; points.clear(); seed = null; saved = false
                 }, label = { Text("Distância conhecida") })
             }
             if (mode == "coin") {
@@ -212,7 +247,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                     contentScale = ContentScale.Fit
                 )
                 Canvas(
-                    Modifier.fillMaxSize().pointerInput(photo) {
+                    Modifier.fillMaxSize().pointerInput(photo, measureStyle) {
                         detectTapGestures { touch ->
                             val mapped = photoPointFromTouch(touch, size, photo.width, photo.height)
                             if (mapped != null && points.size < 4) {

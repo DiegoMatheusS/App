@@ -10,10 +10,11 @@ Aplicativo Android nativo em **Kotlin e Jetpack Compose**, para medições estim
 - Captura de fotografia com CameraX ou importação da galeria.
 - Distância por marcação manual de pontos, com escala calibrada por referência física no **mesmo plano**. Permite calibração por moeda brasileira ou distância conhecida (mm, cm, m).
 - **Contorno experimental por toque na fotografia:** seleciona uma região com cor semelhante à do ponto tocado, destaca o contorno e estima largura e altura pela caixa delimitadora. Há três níveis de tolerância para ajustar a seleção.
+- **Contorno ao vivo na câmera (experimental):** toque em uma região do objeto no vídeo para reprocessar o contorno aproximado com CameraX, sem internet e com atualização limitada a cerca de quatro quadros por segundo. Mostra a largura e altura do contorno como proporções do quadro, sem alegar medidas físicas.
 - Histórico local dos resultados, exclusão individual com confirmação e exportação de relatório PDF A4.
 - Calculadora offline de caixas: volume, área de piso e área superficial.
 
-**Limitação:** contornos são obtidos de uma foto, não de vídeo ao vivo. Não há reconhecimento semântico de objetos nem medição de profundidade. As medidas por foto dependem de referência conhecida na mesma distância/plano do objeto; a precisão deve ser verificada.
+**Limitações:** o contorno ao vivo depende da cor e de uma seleção manual; não é reconhecimento semântico, rastreamento confiável de objetos nem medição de profundidade. Movimentos, reflexos, perspectiva e fundo semelhante podem causar falhas. O contorno sobreposto pode não se alinhar perfeitamente em todos os dispositivos. As proporções do quadro **não são centímetros**. Para medir em unidades físicas, capture uma foto e marque uma referência conhecida no mesmo plano e distância do objeto. A precisão deve ser verificada.
 
 ### Tanques e produtos armazenados
 - Tanques cilíndricos verticais, horizontais e esféricos, modelados como sólidos geométricos ideais.
@@ -80,7 +81,7 @@ O GitHub Actions executa a compilação e os testes automatizados a cada atualiz
 
 ## Próximas etapas
 
-1. Seleção e acompanhamento de contorno de objetos no vídeo ao vivo, com calibração ou profundidade confiável antes de mostrar medidas físicas.
+1. Evoluir o contorno aproximado no vídeo ao vivo para rastreamento mais estável, com calibração dinâmica ou profundidade confiável antes de mostrar medidas físicas.
 2. Melhorias na importação e identificação de paredes e aberturas de plantas, com suporte progressivo a outros formatos arquitetônicos.
 3. Preparar o Scanner 3D para calibração das câmeras, triangulação e reconstrução geométrica offline, após validação com fotografias reais.
 4. Reforçar persistência, restauração de backups e testes instrumentados em Android.
