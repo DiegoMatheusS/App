@@ -326,16 +326,16 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                 val pixelY = 1f / photo.height.coerceAtLeast(1)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
-                        "←" to NormalizedPoint(-pixelX, 0f),
-                        "→" to NormalizedPoint(pixelX, 0f),
-                        "↑" to NormalizedPoint(0f, -pixelY),
-                        "↓" to NormalizedPoint(0f, pixelY)
+                        "←" to Pair(-pixelX, 0f),
+                        "→" to Pair(pixelX, 0f),
+                        "↑" to Pair(0f, -pixelY),
+                        "↓" to Pair(0f, pixelY)
                     ).forEach { (label, delta) ->
                         OutlinedButton(onClick = {
                             val current = points[chosen]
                             points[chosen] = NormalizedPoint(
-                                (current.x + delta.x).coerceIn(0f, 1f),
-                                (current.y + delta.y).coerceIn(0f, 1f)
+                                (current.x + delta.first).coerceIn(0f, 1f),
+                                (current.y + delta.second).coerceIn(0f, 1f)
                             )
                             saved = false
                         }) { Text(label) }
