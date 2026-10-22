@@ -1,7 +1,6 @@
 package br.com.medidor.app.domain
 
 import kotlin.math.abs
-import kotlin.math.min
 
 data class ContourPixel(val x: Int, val y: Int)
 
@@ -26,10 +25,17 @@ data class PlanarContourResult(
  */
 object PlanarContourSegmentation {
     fun segment(pixels: IntArray, width: Int, height: Int,
-                seedX: Int, seedY: Int, tolerance: Int = 32): PlanarContourResult? {
+                seedX: Int, seedY: Int, tolerance: Int = 32,
+                bounds: ContourSearchBounds? = null): PlanarContourResult? {
         require(width in 8..512 && height in 8..512 && pixels.size == width*height)
         require(seedX in 0 until width && seedY in 0 until height)
         require(tolerance in 5..120)
+        if (bounds != null) {
+            require(bounds.right < width && bounds.bottom < height) {
+                "Área de seleção fora do quadro."
+            }
+            if (!bounds.contains(seedX,seedY)) return null
+        }
         val root = pixels[seedY*width + seedX]
         fun diff(value: Int): Int {
             val r = abs(((value ushr 16) and 255) - ((root ushr 16) and 255))
@@ -62,10 +68,10 @@ object PlanarContourSegmentation {
             fun enqueue(n:Int) {
                 if(!visited[n]) {visited[n]=true;queue[tail++]=n}
             }
-            if(x>0) enqueue(i-1)
-            if(x<width-1) enqueue(i+1)
-            if(y>0) enqueue(i-width)
-            if(y<height-1) enqueue(i+width)
+            if(x>(bounds?.left ?: 0)) enqueue(i-1)
+            if(x<(bounds?.right ?: width-1)) enqueue(i+1)
+            if(y>(bounds?.top ?: 0)) enqueue(i-width)
+            if(y<(bounds?.bottom ?: height-1)) enqueue(i+width)
         }
         // Ignore tiny noise and background-scale selections.
         if(count < 16 || count > width*height*.70) return null

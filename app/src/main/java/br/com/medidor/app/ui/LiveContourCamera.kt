@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -42,6 +43,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import br.com.medidor.app.domain.LiveContourTracking
 import br.com.medidor.app.domain.LiveViewportMapping
+import br.com.medidor.app.domain.ContourNormalizedArea
+import br.com.medidor.app.domain.ContourVisualAssessment
+import br.com.medidor.app.domain.ContourVisualQuality
 import br.com.medidor.app.domain.NormalizedPoint
 import br.com.medidor.app.domain.PlanarContourResult
 import br.com.medidor.app.domain.PlanarContourSegmentation
@@ -55,7 +59,8 @@ private data class ContourOverlay(
     val width: Int,
     val height: Int,
     val contour: PlanarContourResult?,
-    val message: String
+    val message: String,
+    val assessment: ContourVisualAssessment? = null
 )
 
 /**
@@ -76,6 +81,10 @@ internal fun LiveContourCamera(
     val worker = remember { Executors.newSingleThreadExecutor() }
     val selected = remember { AtomicReference<NormalizedPoint?>(null) }
     val previous = remember { AtomicReference<PlanarContourResult?>(null) }
+    val chosenArea = remember { AtomicReference<ContourNormalizedArea?>(null) }
+    var areaMode by remember { mutableStateOf(false) }
+    var firstCorner by remember { mutableStateOf<NormalizedPoint?>(null) }
+    var drawnArea by remember { mutableStateOf<ContourNormalizedArea?>(null) }
     val selectionGeneration = remember { AtomicInteger(0) }
     var overlay by remember { mutableStateOf<ContourOverlay?>(null) }
     var capture by remember { mutableStateOf<ImageCapture?>(null) }
@@ -119,6 +128,7 @@ internal fun LiveContourCamera(
                                 val generation = selectionGeneration.get()
                                 val point = selected.get()
                                 val before = previous.get()
+                                val bounds = chosenArea.get()?.pixels(frame.width,frame.height)
                                 val detected = if (point != null)
                                     PlanarContourSegmentation.segment(
                                         frame.pixels,frame.width,frame.height,
@@ -126,7 +136,7 @@ internal fun LiveContourCamera(
                                             .coerceIn(0,frame.width-1),
                                         (point.y * (frame.height-1)).toInt()
                                             .coerceIn(0,frame.height-1),
-                                        threshold.get()
+                                        threshold.get(),bounds
                                     ) else null
                                 val checked = if (point == null) null else
                                     LiveContourTracking.check(before,detected)
@@ -142,9 +152,13 @@ internal fun LiveContourCamera(
                                             ?.let { selected.set(it) }
                                     }
                                     previous.set(nextContour)
+                                    val visual = nextContour?.let {
+                                        ContourVisualQuality.assess(it,before,bounds)
+                                    }
                                     val output = ContourOverlay(frame.width,frame.height,
                                         nextContour,checked?.label
-                                            ?: "Toque no objeto para selecionar o contorno.")
+                                            ?: "Toque no objeto para selecionar o contorno.",
+                                        visual)
                                     mainExecutor.execute {
                                         if (!disposed.get() &&
                                             generation == selectionGeneration.get()) {
@@ -213,24 +227,115 @@ internal fun LiveContourCamera(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Contorno ao vivo — experimental",
             style = MaterialTheme.typography.titleMedium)
-        Text("Toque no objeto para acompanhar aproximadamente uma região de cor semelhante. " +
-            "Mantenha a câmera firme; selecione novamente se perder o contorno.",
+        Text("Selecione diretamente o objeto ou delimite uma área para reduzir " +
+            "a interferência de fundos com cores parecidas.",
             style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !areaMode,
+                onClick = {
+                    areaMode = false
+                    chosenArea.set(null)
+                    drawnArea = null
+                    firstCorner = null
+                    selected.set(null)
+                    previous.set(null)
+                    selectionGeneration.incrementAndGet()
+                    overlay = overlay?.copy(contour=null,assessment=null,
+                        message="Modo livre: toque no objeto.")
+                },
+                label = { Text("Toque livre") }
+            )
+            FilterChip(
+                selected = areaMode,
+                onClick = {
+                    areaMode = true
+                    chosenArea.set(null)
+                    drawnArea = null
+                    firstCorner = null
+                    selected.set(null)
+                    previous.set(null)
+                    selectionGeneration.incrementAndGet()
+                    overlay = overlay?.copy(contour=null,assessment=null,
+                        message="Marque dois cantos e depois toque dentro do objeto.")
+                },
+                label = { Text("Delimitar área") }
+            )
+        }
+        if (areaMode) {
+            OutlinedButton(onClick = {
+                chosenArea.set(null)
+                drawnArea = null
+                firstCorner = null
+                selected.set(null)
+                previous.set(null)
+                selectionGeneration.incrementAndGet()
+                overlay = overlay?.copy(contour=null,assessment=null,
+                    message="Marque novamente dois cantos e toque dentro do objeto.")
+            }) { Text("Redefinir área") }
+        }
         Box(Modifier.fillMaxWidth().height(340.dp)) {
             AndroidView(factory = { previewView },modifier = Modifier.fillMaxSize())
-            Canvas(Modifier.fillMaxSize().pointerInput(overlay?.width,overlay?.height) {
+            Canvas(Modifier.fillMaxSize().pointerInput(areaMode,overlay?.width,overlay?.height) {
                 detectTapGestures { touch ->
-                    val normalized = LiveViewportMapping.point(touch.x,touch.y,
+                    val n = LiveViewportMapping.point(touch.x,touch.y,
                         size.width.toFloat(),size.height.toFloat())
-                    if (normalized != null) {
+                        ?.let { NormalizedPoint(it.first,it.second) }
+                    if (n != null) {
                         selectionGeneration.incrementAndGet()
-                        selected.set(NormalizedPoint(normalized.first,normalized.second))
+                        selected.set(null)
                         previous.set(null)
-                        overlay = overlay?.copy(contour = null,
-                            message = "Buscando contorno no ponto selecionado…")
+                        val message = if (!areaMode) {
+                            selected.set(n)
+                            "Analisando a região selecionada…"
+                        } else {
+                            val region = chosenArea.get()
+                            when {
+                                region != null && region.contains(n) -> {
+                                    selected.set(n)
+                                    "Analisando a região dentro da área delimitada…"
+                                }
+                                region != null -> "Toque dentro da área delimitada ou redefina-a."
+                                firstCorner == null -> {
+                                    firstCorner = n
+                                    "Toque no canto oposto para fechar a área."
+                                }
+                                else -> {
+                                    val newArea = ContourNormalizedArea.fromCorners(
+                                        firstCorner!!,n)
+                                    if (newArea == null) {
+                                        "Área pequena demais: escolha cantos mais distantes."
+                                    } else {
+                                        chosenArea.set(newArea)
+                                        drawnArea = newArea
+                                        firstCorner = null
+                                        "Área definida. Agora toque no objeto dentro dela."
+                                    }
+                                }
+                            }
+                        }
+                        overlay = overlay?.copy(contour = null,message=message,
+                            assessment=null)
+                            ?: ContourOverlay(1,1,null,message)
                     }
                 }
             }) {
+                val region = drawnArea
+                if (region != null) {
+                    val color = Color(0xFFFFBF66)
+                    val left = size.width*region.left
+                    val right = size.width*region.right
+                    val top = size.height*region.top
+                    val bottom = size.height*region.bottom
+                    drawLine(color,Offset(left,top),Offset(right,top),2.dp.toPx())
+                    drawLine(color,Offset(right,top),Offset(right,bottom),2.dp.toPx())
+                    drawLine(color,Offset(right,bottom),Offset(left,bottom),2.dp.toPx())
+                    drawLine(color,Offset(left,bottom),Offset(left,top),2.dp.toPx())
+                }
+                firstCorner?.let { corner ->
+                    drawCircle(Color(0xFFFFBF66),7.dp.toPx(),
+                        Offset(size.width*corner.x,size.height*corner.y))
+                }
                 val frame = overlay ?: return@Canvas
                 val c = frame.contour ?: return@Canvas
                 val color = Color(0xFF44E8B5)
@@ -257,6 +362,15 @@ internal fun LiveContourCamera(
                 "(não são centímetros).",
                 style = MaterialTheme.typography.bodySmall)
         }
+        overlay?.assessment?.let { assessment ->
+            Text("Estabilidade visual: ${assessment.rating.display}. " +
+                assessment.explanation,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (assessment.rating ==
+                    br.com.medidor.app.domain.ContourVisualRating.STABLE)
+                    MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.error)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (choice in listOf(18,32,55)) {
                 OutlinedButton(onClick = {
@@ -264,7 +378,7 @@ internal fun LiveContourCamera(
                     threshold.set(choice)
                     previous.set(null)
                     selectionGeneration.incrementAndGet()
-                    overlay = overlay?.copy(contour = null,
+                    overlay = overlay?.copy(contour = null,assessment=null,
                         message = "Ajustando tolerância de contorno…")
                 },enabled = tolerance != choice) {
                     Text(when(choice) {
@@ -299,7 +413,7 @@ internal fun LiveContourCamera(
         Text("A seleção ao vivo NÃO mede distância, profundidade nem identifica " +
             "automaticamente o objeto. Para estimar centímetros, capture uma foto " +
             "e calibre uma referência física no mesmo plano. O contorno da câmera " +
-            "depende do recorte e rotação da câmera; verifique o alinhamento.",
+            "é apenas uma aproximação visual, mesmo quando a estabilidade aparece alta.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
