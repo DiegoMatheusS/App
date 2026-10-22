@@ -31,7 +31,7 @@ No Android Studio: abrir a pasta do projeto, instalar Android SDK 37 e sincroniz
 ## Roadmap
 
 1. Melhorar foto calibrada: retificação de perspectiva, zoom de precisão, galeria de imagens associadas às medições.
-2. Migrar persistência protótipo para Room, backups versionados robustos, relatórios PDF e testes instrumentados.
+2. Migrar persistência protótipo para Room, incluir backup recuperável entre dispositivos e testes instrumentados de restauração e PDFs.
 3. Modo Arquiteto: melhorar escala/calibração entre plantas, edição detalhada de paredes/aberturas e validação física do ARCore.
 4. Scanner 3D por fotogrametria offline, com benchmarks de hardware.
 5. Detecção/contagem de tijolos com modelo de IA local opcional.
@@ -97,3 +97,11 @@ Workflow compila debug e executa testes quando houver push ou PR (necessita Andr
 - **Exportar maquete 3D (.obj)**: modelo aproximado das paredes, portas e janelas marcadas manualmente, em metros, sem texturas nem BIM; pode ser aberto em aplicativos compatíveis com Wavefront OBJ.
 - Controles usam Android Storage Access Framework e não exigem acesso irrestrito a arquivos do aparelho.
 - Testes unitários de limites de arquivo, proteção contra caminhos inseguros e serialização da geometria OBJ. Testes físicos de restauração, conteúdo ZIP e abertura em visualizador 3D ainda são necessários.
+
+## PR #11 — Relatórios PDF e validação adicional de backups
+- **Exportar relatório PDF das medições** pela tela Histórico, com resultados registrados, datas e aviso de estimativa. Exportação local por seletor de documentos do Android.
+- **Exportar relatório PDF do projeto atual** pelo Modo Arquiteto, com nomes de pavimentos, contagens de paredes/aberturas, extensão de paredes calibradas, pé-direito, deslocamentos e rotação.
+- Relatórios A4 com paginação automática, números de página e aviso explícito de que **não são laudos certificados**. O aplicativo não envia os dados à nuvem.
+- **Extração de backup ZIP reforçada** e reutilizável, testada com arquivos ZIP reais em memória, incluindo fluxo normal, tentativa de leitura fora do diretório, arquivo não permitido, manifesto ausente e manifesto compactado acima do limite.
+- Na restauração, o tamanho da planta declarado pelo projeto precisa corresponder às dimensões reais da imagem JPEG. Backups inválidos são rejeitados antes de substituir os projetos.
+- **Limites da validação:** testes JVM verificam a leitura de ZIP e o conteúdo/paginação do relatório, mas ainda faltam testes instrumentados no Android de backup/restauração completos, arquivos PDF abertos em leitores e comportamento em caso de falha de armazenamento.

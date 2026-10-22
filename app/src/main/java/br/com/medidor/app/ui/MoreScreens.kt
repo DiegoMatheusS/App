@@ -1,6 +1,14 @@
 package br.com.medidor.app.ui
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import br.com.medidor.app.domain.ReportContent
+import br.com.medidor.app.data.PdfReportExporter
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,6 +42,28 @@ fun HistoryScreen(
     onDeleteOne: (Int) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exportingPdf by remember { mutableStateOf(false) }
+    var pdfFeedback by remember { mutableStateOf<String?>(null) }
+    val savePdf = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri != null && !exportingPdf) scope.launch {
+            exportingPdf = true
+            try {
+                val pageCount = withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: error("Não foi possível criar o PDF.")
+                    PdfReportExporter.write(ReportContent.measurements(records), output)
+                }
+                pdfFeedback = "PDF exportado com sucesso ($pageCount página(s))."
+            } catch (e: Exception) {
+                pdfFeedback = "Falha ao exportar PDF: ${e.localizedMessage}"
+            } finally {
+                exportingPdf = false
+            }
+        }
+    }
     var deleteIndex by remember { mutableStateOf<Int?>(null) }
     var confirmAll by remember { mutableStateOf(false) }
     if (deleteIndex != null || confirmAll) {
@@ -56,7 +86,7 @@ fun HistoryScreen(
     }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Histórico local", style = MaterialTheme.typography.titleLarge)
-        Text("Seus cálculos ficam salvos neste dispositivo. Ainda não há sincronização ou backup.",
+        Text("Seus cálculos ficam salvos neste dispositivo. Faça backup manual em Modo Arquiteto.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (records.isEmpty()) {
             ResultCard("Sem medições", "Faça um cálculo e toque em Salvar.")
@@ -75,6 +105,9 @@ fun HistoryScreen(
                 }
                 context.startActivity(Intent.createChooser(share, "Compartilhar medições"))
             }) { Text("Compartilhar relatório (texto)") }
+            OutlinedButton(enabled = !exportingPdf, onClick = {
+                savePdf.launch("medidor-relatorio-medicoes.pdf")
+            }) { Text("Exportar relatório PDF") }
             records.forEachIndexed { index, record ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -87,6 +120,8 @@ fun HistoryScreen(
             }
             OutlinedButton(onClick = { confirmAll = true }) { Text("Apagar histórico deste aparelho") }
         }
+        if (exportingPdf) Text("Criando relatório PDF…")
+        pdfFeedback?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

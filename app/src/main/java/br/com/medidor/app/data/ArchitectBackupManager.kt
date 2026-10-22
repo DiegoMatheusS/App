@@ -11,7 +11,6 @@ import java.io.OutputStream
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
@@ -106,40 +105,7 @@ class ArchitectBackupManager(private val context: Context) {
         val previousMeasurements = measurements.getString("records", null)
         var changedPreferences = false
         try {
-            val collected = mutableMapOf<String, File>()
-            ZipInputStream(source).use { zip ->
-                var entries = 0
-                var total = 0L
-                while (true) {
-                    val entry = zip.nextEntry ?: break
-                    entries++
-                    require(entries <= BackupLimits.MAX_ENTRY_COUNT &&
-                        !entry.isDirectory && BackupLimits.validEntry(entry.name) &&
-                        !collected.containsKey(entry.name)) {
-                        "Backup contém entradas inválidas, duplicadas ou em excesso."
-                    }
-                    val max = BackupLimits.allowedSize(entry.name)
-                    val target = File(staging,
-                        if (entry.name == "manifest.json") "manifest.json"
-                        else entry.name.removePrefix("images/"))
-                    var written = 0L
-                    target.outputStream().use { out ->
-                        val buffer = ByteArray(16 * 1024)
-                        while (true) {
-                            val count = zip.read(buffer)
-                            if (count == -1) break
-                            written += count
-                            total += count
-                            require(written <= max && total <= BackupLimits.MAX_TOTAL_BYTES) {
-                                "Backup excede os limites permitidos."
-                            }
-                            out.write(buffer, 0, count)
-                        }
-                    }
-                    collected[entry.name] = target
-                    zip.closeEntry() // Verifies the archive entry checksum.
-                }
-            }
+            val collected = BackupZipReader.extract(source, staging)
             val manifestFile = requireNotNull(collected["manifest.json"]) {
                 "Manifesto do backup não encontrado."
             }
@@ -189,6 +155,21 @@ class ArchitectBackupManager(private val context: Context) {
                 BitmapFactory.decodeFile(file.absolutePath, dimensions)
                 require(dimensions.outWidth in 1..8192 && dimensions.outHeight in 1..8192) {
                     "Imagem JPEG inválida ou com resolução excessiva."
+                }
+                // The JPEG header and each floor's stated dimensions must agree.
+                plans.forEach { (_, _, project) ->
+                    if (project != null) {
+                        val floors = project.getJSONArray("floors")
+                        for (floorIndex in 0 until floors.length()) {
+                            val floor = floors.getJSONObject(floorIndex)
+                            if (floor.optString("image") == name) {
+                                require(floor.optInt("width") == dimensions.outWidth &&
+                                    floor.optInt("height") == dimensions.outHeight) {
+                                    "Dimensões da planta incompatíveis com a imagem: $name"
+                                }
+                            }
+                        }
+                    }
                 }
             }
             require(received == referencedImages && collected.size == received.size + 1) {
