@@ -62,7 +62,10 @@ class ArchitectPlanStore(private val context: Context) {
                 openings = openings,
                 offsetXMeters = f.optDouble("offsetXMeters", 0.0).takeIf { it.isFinite() } ?: 0.0,
                 offsetYMeters = f.optDouble("offsetYMeters", 0.0).takeIf { it.isFinite() } ?: 0.0,
-                alignmentPoint = f.optJSONObject("alignmentPoint")?.let(::point)
+                alignmentPoint = f.optJSONObject("alignmentPoint")?.let(::point),
+                secondAlignmentPoint = f.optJSONObject("secondAlignmentPoint")?.let(::point),
+                rotationDegrees = f.optDouble("rotationDegrees", 0.0)
+                    .takeIf { it.isFinite() && it in -180.0..180.0 } ?: 0.0
             )
         }
         if (floors.isEmpty()) ArchitectPlan() else ArchitectPlan(
@@ -76,7 +79,7 @@ class ArchitectPlanStore(private val context: Context) {
     fun save(plan: ArchitectPlan) {
         require(plan.floors.isNotEmpty())
         val obj = JSONObject().apply {
-            put("version", 4)
+            put("version", 5)
             put("selected", plan.selectedFloor)
             put("floors", JSONArray().also { arr ->
                 plan.floors.forEach { f ->
@@ -89,6 +92,10 @@ class ArchitectPlanStore(private val context: Context) {
                         put("wallHeightMeters", f.wallHeightMeters)
                         put("offsetXMeters", f.offsetXMeters)
                         put("offsetYMeters", f.offsetYMeters)
+                        put("rotationDegrees", f.rotationDegrees)
+                        if (f.secondAlignmentPoint != null) {
+                            put("secondAlignmentPoint", pointJson(f.secondAlignmentPoint))
+                        }
                         if (f.alignmentPoint != null) put("alignmentPoint", pointJson(f.alignmentPoint))
                         if (f.referenceStart != null) put("refA", pointJson(f.referenceStart))
                         if (f.referenceEnd != null) put("refB", pointJson(f.referenceEnd))

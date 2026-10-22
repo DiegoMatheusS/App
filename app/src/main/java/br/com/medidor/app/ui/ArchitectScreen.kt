@@ -91,6 +91,7 @@ fun ArchitectScreen() {
     var wallHeightText by remember(selected) { mutableStateOf(current.wallHeightMeters.toString()) }
     var offsetXText by remember(selected) { mutableStateOf(current.offsetXMeters.toString()) }
     var offsetYText by remember(selected) { mutableStateOf(current.offsetYMeters.toString()) }
+    var rotationText by remember(selected) { mutableStateOf(current.rotationDegrees.toString()) }
 
     fun persist(next: ArchitectPlan) {
         try {
@@ -126,7 +127,8 @@ fun ArchitectScreen() {
                     referenceEnd = null,
                     walls = emptyList(),
                     openings = emptyList(),
-                    alignmentPoint = null
+                    alignmentPoint = null,
+                    secondAlignmentPoint = null
                 ))
                 editingMode = "reference"
                 perspectiveCorners.clear()
@@ -157,6 +159,7 @@ fun ArchitectScreen() {
                         referenceStart = null,
                         referenceEnd = null,
                         alignmentPoint = null,
+                        secondAlignmentPoint = null,
                         walls = emptyList(),
                         openings = emptyList()
                     ))
@@ -251,23 +254,45 @@ fun ArchitectScreen() {
             style = MaterialTheme.typography.bodySmall)
         if (selected > 0) {
             Text("Posição horizontal do pavimento", style = MaterialTheme.typography.titleMedium)
-            val alignment = PlanLandmarkAlignment.suggestedOffset(project.floors[0], current)
-            Text("Alinhamento por referência: marque o mesmo ponto físico no térreo e neste andar " +
-                "(ex.: centro da escada ou pilar). As duas plantas precisam estar calibradas.",
+            val firstAlignment = PlanLandmarkAlignment.suggestedOffset(project.floors[0], current)
+            val twoPointAlignment = PlanLandmarkAlignment.suggestedPose(project.floors[0], current)
+            Text("Marque dois pontos correspondentes no térreo e neste pavimento " +
+                "(por exemplo, dois pilares). Dois pontos permitem corrigir também a rotação. " +
+                "Se tiver apenas um, use o alinhamento por deslocamento.",
                 style = MaterialTheme.typography.bodySmall)
             OutlinedButton(
-                enabled = alignment != null &&
-                    alignment.first in -20.0..20.0 && alignment.second in -20.0..20.0,
+                enabled = twoPointAlignment != null &&
+                    twoPointAlignment.offsetXMeters in -20.0..20.0 &&
+                    twoPointAlignment.offsetYMeters in -20.0..20.0,
                 onClick = {
-                    alignment?.let { (x, y) ->
+                    twoPointAlignment?.let { pose ->
+                        offsetXText = formatMeters(pose.offsetXMeters)
+                        offsetYText = formatMeters(pose.offsetYMeters)
+                        rotationText = formatMeters(pose.rotationDegrees)
+                        editFloor(current.copy(
+                            offsetXMeters = pose.offsetXMeters,
+                            offsetYMeters = pose.offsetYMeters,
+                            rotationDegrees = pose.rotationDegrees
+                        ))
+                    }
+                }
+            ) { Text("Alinhar posição e rotação (2 pontos)") }
+            OutlinedButton(
+                enabled = firstAlignment != null &&
+                    firstAlignment.first in -20.0..20.0 &&
+                    firstAlignment.second in -20.0..20.0,
+                onClick = {
+                    firstAlignment?.let { (x, y) ->
                         offsetXText = formatMeters(x)
                         offsetYText = formatMeters(y)
                         editFloor(current.copy(offsetXMeters = x, offsetYMeters = y))
                     }
                 }
-            ) { Text("Alinhar com ponto do térreo") }
-            if (alignment == null) {
-                Text("Pendente: ponto de referência e escala nos dois pavimentos.",
+            ) { Text("Alinhar só posição (1 ponto)") }
+            if (twoPointAlignment == null) {
+                Text("Rotação automática indisponível: confira os dois pontos, " +
+                    "as escalas e a distância entre as referências (mínimo 0,5 m). " +
+                    "Diferenças de escala maiores que 8% são rejeitadas.",
                     style = MaterialTheme.typography.bodySmall)
             }
             OutlinedTextField(
@@ -286,21 +311,35 @@ fun ArchitectScreen() {
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
+            OutlinedTextField(
+                value = rotationText,
+                onValueChange = { rotationText = it },
+                label = { Text("Rotação do pavimento (graus: -180 a 180)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val x = offsetXText.trim().replace(',', '.').toDoubleOrNull()
                     val y = offsetYText.trim().replace(',', '.').toDoubleOrNull()
-                    if (x != null && y != null && x.isFinite() && y.isFinite() &&
-                        x in -20.0..20.0 && y in -20.0..20.0) {
-                        editFloor(current.copy(offsetXMeters = x, offsetYMeters = y))
+                    val degrees = rotationText.trim().replace(',', '.').toDoubleOrNull()
+                    if (x != null && y != null && degrees != null &&
+                        x.isFinite() && y.isFinite() && degrees.isFinite() &&
+                        x in -20.0..20.0 && y in -20.0..20.0 &&
+                        degrees in -180.0..180.0) {
+                        editFloor(current.copy(
+                            offsetXMeters = x, offsetYMeters = y, rotationDegrees = degrees
+                        ))
                     } else {
-                        error = "Informe deslocamentos entre -20 e 20 metros."
+                        error = "Informe X/Y entre -20 e 20 m e rotação entre -180° e 180°."
                     }
-                }) { Text("Aplicar posição") }
+                }) { Text("Aplicar posição e rotação") }
                 OutlinedButton(onClick = {
                     offsetXText = "0"
                     offsetYText = "0"
-                    editFloor(current.copy(offsetXMeters = 0.0, offsetYMeters = 0.0))
+                    rotationText = "0"
+                    editFloor(current.copy(offsetXMeters = 0.0, offsetYMeters = 0.0, rotationDegrees = 0.0))
                 }) { Text("Centralizar") }
             }
         }
@@ -336,7 +375,10 @@ fun ArchitectScreen() {
                 }, label = { Text("Corrigir perspectiva") })
                 FilterChip(selected = editingMode == "landmark", onClick = {
                     editingMode = "landmark"; pending = null; perspectiveCorners.clear()
-                }, label = { Text("Ponto de alinhamento") })
+                }, label = { Text("Ponto 1") })
+                FilterChip(selected = editingMode == "landmark2", onClick = {
+                    editingMode = "landmark2"; pending = null; perspectiveCorners.clear()
+                }, label = { Text("Ponto 2") })
                 FilterChip(selected = editingMode == "reference", onClick = {
                     editingMode = "reference"; pending = null
                 }, label = { Text("Marcar escala") })
@@ -353,7 +395,9 @@ fun ArchitectScreen() {
                         "Marque os cantos da folha nesta ordem: superior esquerdo, superior direito, " +
                             "inferior direito, inferior esquerdo (${perspectiveCorners.size}/4)."
                     editingMode == "landmark" ->
-                        "Toque no mesmo ponto físico usado no outro pavimento para alinhar."
+                        "Toque no PRIMEIRO ponto físico correspondente em ambos os pavimentos."
+                    editingMode == "landmark2" ->
+                        "Toque no SEGUNDO ponto correspondente (afastado ao menos 0,5 m do primeiro)."
                     pending == null && editingMode == "reference" ->
                         "Toque nos dois extremos da distância conhecida."
                     pending != null && editingMode == "reference" ->
@@ -378,6 +422,10 @@ fun ArchitectScreen() {
                         }
                         "landmark" -> {
                             editFloor(current.copy(alignmentPoint = point))
+                            editingMode = if (current.calibrated) "walls" else "reference"
+                        }
+                        "landmark2" -> {
+                            editFloor(current.copy(secondAlignmentPoint = point))
                             editingMode = if (current.calibrated) "walls" else "reference"
                         }
                         else -> {
@@ -425,7 +473,7 @@ fun ArchitectScreen() {
                 Button(enabled = valid, onClick = {
                     if (current.walls.isNotEmpty() || current.referenceStart != null ||
                         current.referenceEnd != null || current.openings.isNotEmpty() ||
-                        current.alignmentPoint != null) confirmRectify = true
+                        current.alignmentPoint != null || current.secondAlignmentPoint != null) confirmRectify = true
                     else rectifySelectedPlan()
                 }) { Text("Aplicar correção de perspectiva") }
                 OutlinedButton(enabled = perspectiveCorners.isNotEmpty(), onClick = {
@@ -651,6 +699,12 @@ private fun FloorPlanCanvas(
             }
             floor.alignmentPoint?.let {
                 drawCircle(Color(0xFFE91E63), 7.dp.toPx(), center(it))
+            }
+            floor.secondAlignmentPoint?.let {
+                drawCircle(Color(0xFF00BCD4), 7.dp.toPx(), center(it))
+                floor.alignmentPoint?.let { first ->
+                    drawLine(Color(0xFF00BCD4), center(first), center(it), 2.dp.toPx())
+                }
             }
             pending?.let { drawCircle(Color(0xFFF44336), 7.dp.toPx(), center(it)) }
         }
