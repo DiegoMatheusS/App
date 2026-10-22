@@ -2,6 +2,9 @@ package br.com.medidor.app.ui
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,10 +26,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.awaitPointerEvent
-import androidx.compose.ui.input.pointer.calculateCentroid
-import androidx.compose.ui.input.pointer.calculatePan
-import androidx.compose.ui.input.pointer.calculateZoom
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import br.com.medidor.app.domain.PlanFloor
@@ -50,7 +51,10 @@ internal fun ZoomablePlanCanvas(
 ) {
     var viewport by remember(bitmap) { mutableStateOf(PlanViewport()) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             OutlinedButton(
                 enabled = viewport.zoom > 1.01f,
                 onClick = {
@@ -81,7 +85,7 @@ internal fun ZoomablePlanCanvas(
                                 val centroid = event.calculateCentroid(useCurrent = true)
                                 val zoom = event.calculateZoom()
                                 val pan = event.calculatePan()
-                                viewport = PlanViewportMath.change(
+                                if (centroid.isSpecified) viewport = PlanViewportMath.change(
                                     viewport,
                                     size.width.toFloat(),
                                     size.height.toFloat(),
