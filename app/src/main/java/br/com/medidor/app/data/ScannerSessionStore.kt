@@ -8,6 +8,9 @@ import br.com.medidor.app.domain.ScannerSessionArchive
 import br.com.medidor.app.domain.ScannerPhotoQuality
 import br.com.medidor.app.domain.ScannerPhotoCheck
 import br.com.medidor.app.domain.ScannerQualityReport
+import br.com.medidor.app.domain.ScannerFeatureMatching
+import br.com.medidor.app.domain.ScanCorrespondenceReport
+import br.com.medidor.app.domain.ImageFeatureSet
 import java.io.InputStream
 import java.io.OutputStream
 import org.json.JSONArray
@@ -236,6 +239,78 @@ class ScannerSessionStore(context: Context) {
             }
         }
         return ScannerPhotoQuality.summarize(checks)
+    }
+
+    /**
+     * First offline visual-correspondence prototype. Reads at most one bounded
+     * Bitmap at a time and keeps ONLY 120 feature descriptors per photo.
+     *
+     * Results are 2D image-space correspondences, not camera poses or a mesh.
+     */
+    fun compareSessionPhotos(id: String): ScanCorrespondenceReport {
+        val session = list().firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Sessão não encontrada.")
+        val descriptors = linkedMapOf<Int, ImageFeatureSet>()
+        val unreadable = mutableListOf<Int>()
+        for ((slot, name) in session.frames.toSortedMap()) {
+            val photo = safeFile(name)
+            if (photo == null || !photo.isFile || photo.length() !in 1..MAX_SHOT_BYTES) {
+                unreadable += slot
+                continue
+            }
+            try {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(photo.absolutePath, bounds)
+                require(bounds.outWidth in 40..4096 && bounds.outHeight in 40..4096) {
+                    "Dimensões de imagem inválidas"
+                }
+                var sample = 1
+                while (maxOf(bounds.outWidth / sample, bounds.outHeight / sample) > 384) {
+                    sample *= 2
+                }
+                val bitmap = BitmapFactory.decodeFile(photo.absolutePath,
+                    BitmapFactory.Options().apply { inSampleSize = sample })
+                    ?: error("Fotografia não pode ser decodificada")
+                val size = ScannerFeatureMatching.IMAGE_SIZE
+                val resized = try {
+                    Bitmap.createScaledBitmap(bitmap, size, size, true)
+                } catch (error: Exception) {
+                    bitmap.recycle()
+                    throw error
+                }
+                val pixels = IntArray(size * size)
+                try {
+                    resized.getPixels(pixels, 0, size, 0, 0, size, size)
+                } finally {
+                    if (resized !== bitmap) resized.recycle()
+                    bitmap.recycle()
+                }
+                // Use a stable luminance conversion before feature detection.
+                val gray = IntArray(size * size) { index ->
+                    val color = pixels[index]
+                    val r = (color ushr 16) and 255
+                    val g = (color ushr 8) and 255
+                    val b = color and 255
+                    (299 * r + 587 * g + 114 * b) / 1000
+                }
+                descriptors[slot] = ScannerFeatureMatching.detect(gray, size, size)
+            } catch (_: Exception) {
+                unreadable += slot
+            }
+        }
+        val availablePairs = ScannerFeatureMatching.recommendedPairs()
+            .filter { (first, second) -> first in descriptors && second in descriptors }
+        val results = availablePairs.map { (first, second) ->
+            ScannerFeatureMatching.compare(
+                first, second, descriptors.getValue(first), descriptors.getValue(second)
+            )
+        }
+        return ScanCorrespondenceReport(
+            pairs = results,
+            missingSlots = (0 until ScannerCaptureGuide.REQUIRED_SHOTS)
+                .filterNot { it in session.frames.keys },
+            unavailableSlots = unreadable
+        )
     }
 
     fun thumbnail(fileName: String?): Bitmap? {

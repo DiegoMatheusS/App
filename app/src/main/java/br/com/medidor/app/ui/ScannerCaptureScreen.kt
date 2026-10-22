@@ -42,6 +42,7 @@ import br.com.medidor.app.data.ScannerSessionStore
 import br.com.medidor.app.domain.ScanPass
 import br.com.medidor.app.domain.ScannerCaptureGuide
 import br.com.medidor.app.domain.ScannerQualityReport
+import br.com.medidor.app.domain.ScanCorrespondenceReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,6 +71,8 @@ fun ScannerCaptureScreen() {
     var feedback by remember { mutableStateOf<String?>(null) }
     var qualityReport by remember { mutableStateOf<ScannerQualityReport?>(null) }
     var reportSessionId by remember { mutableStateOf<String?>(null) }
+    var correspondenceReport by remember { mutableStateOf<ScanCorrespondenceReport?>(null) }
+    var correspondenceSessionId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     fun reload(id: String?) {
@@ -79,6 +82,8 @@ fun ScannerCaptureScreen() {
         refresh++
         qualityReport = null
         reportSessionId = null
+        correspondenceReport = null
+        correspondenceSessionId = null
     }
 
     fun saveShot(bitmap: Bitmap, sessionId: String, slot: Int) {
@@ -273,6 +278,8 @@ fun ScannerCaptureScreen() {
                         feedback = null
                         qualityReport = null
                         reportSessionId = null
+                        correspondenceReport = null
+                        correspondenceSessionId = null
                     },
                     label = { Text("${session.name} (${session.capturedCount}/20)") }
                 )
@@ -383,6 +390,65 @@ fun ScannerCaptureScreen() {
                 Text("O algoritmo verifica exposição, detalhes visuais e semelhança aproximada " +
                     "entre fotos reduzidas. Não identifica poses, pontos 3D, sobreposição " +
                     "geométrica nem garante fotogrametria.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(
+                enabled = !busy && !showCamera && active.frames.size >= 2,
+                onClick = {
+                    val requestedId = active.id
+                    scope.launch {
+                        busy = true
+                        try {
+                            val result = withContext(Dispatchers.Default) {
+                                store.compareSessionPhotos(requestedId)
+                            }
+                            if (activeId == requestedId) {
+                                correspondenceReport = result
+                                correspondenceSessionId = requestedId
+                                feedback = "Análise de correspondências 2D concluída."
+                            }
+                        } catch (e: Exception) {
+                            feedback = "Falha na comparação das fotos: ${e.localizedMessage}"
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            ) { Text("Comparar pontos visuais entre fotos") }
+            if (correspondenceReport != null && correspondenceSessionId == active.id) {
+                val report = correspondenceReport!!
+                Text("Correspondências 2D (experimental)",
+                    style = MaterialTheme.typography.titleMedium)
+                Text("Pares de ângulos vizinhos examinados: ${report.pairs.size}/28; " +
+                    "pares com consenso geométrico aproximado: ${report.supportedPairs}.")
+                if (report.pairs.isEmpty()) {
+                    Text("Sem pares vizinhos de fotografias disponíveis. " +
+                        "Capture as posições consecutivas antes de comparar.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                report.pairs.forEach { pair ->
+                    Text(
+                        "Fotos ${pair.firstSlot + 1} → ${pair.secondSlot + 1}: " +
+                            "${pair.inliers}/${pair.tentative} correspondências consistentes" +
+                            if (pair.supported) " (indício positivo)" else " (inconclusivo)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (pair.supported) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.error
+                    )
+                }
+                if (report.unavailableSlots.isNotEmpty()) {
+                    Text("Não foi possível ler as fotos: " +
+                        report.unavailableSlots.joinToString(", ") { "${it + 1}" },
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                if (report.missingSlots.isNotEmpty()) {
+                    Text("Fotos ainda não capturadas: ${report.missingSlots.size}/20.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                Text("O método usa pontos de contraste, descritores binários e uma " +
+                    "verificação de transformação 2D. Pode falhar com mudanças fortes de ângulo, " +
+                    "objetos lisos ou sombras. Resultado positivo não mede profundidade nem " +
+                    "calcula posição 3D da câmera. Nenhuma malha é gerada.",
                     style = MaterialTheme.typography.bodySmall)
             }
             Text("Selecione a posição da fotografia:", fontWeight = FontWeight.SemiBold)
