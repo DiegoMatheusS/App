@@ -11,13 +11,33 @@ android {
         applicationId = "br.com.medidor.app"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = System.getenv("APPMETRICAS_VERSION_CODE")?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+        versionName = System.getenv("APPMETRICAS_VERSION_NAME") ?: "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Signed releases require secrets at build time. Never commit the keystore.
+    val keyFile = System.getenv("APPMETRICAS_KEYSTORE_PATH")
+    val storePasswordSecret = System.getenv("APPMETRICAS_KEYSTORE_PASSWORD")
+    val alias = System.getenv("APPMETRICAS_KEY_ALIAS")
+    val privateKeySecret = System.getenv("APPMETRICAS_KEY_PASSWORD")
+    val signedRelease = listOf(keyFile, storePasswordSecret, alias, privateKeySecret).all { !it.isNullOrBlank() }
+    signingConfigs {
+        if (signedRelease) {
+            create("appmetricasRelease") {
+                storeFile = file(keyFile!!)
+                storePassword = storePasswordSecret
+                keyAlias = alias
+                keyPassword = privateKeySecret
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
     buildTypes {
         release {
+            if (signedRelease) signingConfig = signingConfigs.getByName("appmetricasRelease")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
