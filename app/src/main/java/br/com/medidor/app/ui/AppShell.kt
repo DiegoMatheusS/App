@@ -119,8 +119,8 @@ fun AppShell() {
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (destination) {
                 Destination.HOME -> HomeScreen(onOpen = ::navigate)
-                Destination.BOX -> BoxCalculatorScreen(onSave = ::addRecord)
-                Destination.TANK -> TankCalculatorScreen(onSave = ::addRecord)
+                Destination.BOX -> BoxCalculatorScreen(onSave = ::addRecord, onCamera = { navigate(Destination.PHOTO) })
+                Destination.TANK -> TankCalculatorScreen(onSave = ::addRecord, onCamera = { navigate(Destination.PHOTO) })
                 Destination.PHOTO -> CameraMeasurementScreen(onSave = ::addRecord)
                 Destination.HISTORY -> HistoryScreen(records = records, onDeleteAll = {
                     store.clear()
