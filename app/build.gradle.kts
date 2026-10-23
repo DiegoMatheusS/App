@@ -16,8 +16,28 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Signed releases require secrets at build time. Never commit the keystore.
+    val keyFile = System.getenv("APPMETRICAS_KEYSTORE_PATH")
+    val keyPassword = System.getenv("APPMETRICAS_KEYSTORE_PASSWORD")
+    val alias = System.getenv("APPMETRICAS_KEY_ALIAS")
+    val aliasPassword = System.getenv("APPMETRICAS_KEY_PASSWORD")
+    val signedRelease = listOf(keyFile, keyPassword, alias, aliasPassword).all { !it.isNullOrBlank() }
+    signingConfigs {
+        if (signedRelease) {
+            create("appmetricasRelease") {
+                storeFile = file(keyFile!!)
+                storePassword = keyPassword
+                keyAlias = alias
+                keyPassword = aliasPassword
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
     buildTypes {
         release {
+            if (signedRelease) signingConfig = signingConfigs.getByName("appmetricasRelease")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
