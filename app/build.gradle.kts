@@ -11,8 +11,8 @@ android {
         applicationId = "br.com.medidor.app"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = System.getenv("APPMETRICAS_VERSION_CODE")?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+        versionName = System.getenv("APPMETRICAS_VERSION_NAME") ?: "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
