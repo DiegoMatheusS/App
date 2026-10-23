@@ -76,11 +76,7 @@ fun AppShell() {
                 Destination.PRO -> ProScreen()
                 Destination.ARCHITECT -> ArchitectScreen()
                 Destination.SCANNER -> ScannerCaptureScreen()
-                Destination.COUNT -> PlannedFeatureScreen(
-                    title = "Contagem de objetos",
-                    description = "Contagem automática de tijolos, caixas e peças: módulo futuro com IA local e correção manual.",
-                    stages = listOf("Anotar fotos de treino", "Treinar detector local", "Contar e marcar objetos visíveis", "Estimar pilhas com indicação de incerteza")
-                )
+                Destination.COUNT -> ObjectCountScreen(onSave = ::addRecord)
             }
         }
     }
