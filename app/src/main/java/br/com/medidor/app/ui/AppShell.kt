@@ -12,6 +12,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.BackHandler
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -52,13 +54,26 @@ fun AppShell() {
     var destinationName by rememberSaveable { mutableStateOf(Destination.HOME.name) }
     val destination = Destination.entries.firstOrNull { it.name == destinationName } ?: Destination.HOME
     var records by remember { mutableStateOf(store.load()) }
+    var showMore by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(destination) {
         if (destination == Destination.HISTORY) records = store.load()
     }
     fun navigate(to: Destination) { destinationName = to.name }
-    BackHandler(enabled = destination != Destination.HOME) { navigate(Destination.HOME) }
+    BackHandler(enabled = showMore || destination != Destination.HOME) {
+        if (showMore) showMore = false else navigate(Destination.HOME)
+    }
     fun addRecord(title: String, details: String) { records = store.save(title, details) }
 
+    if (showMore) {
+        ModalBottomSheet(onDismissRequest = { showMore = false }) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Mais ferramentas", style = MaterialTheme.typography.titleLarge)
+                listOf(Destination.SCANNER, Destination.COUNT, Destination.HISTORY, Destination.PHOTO, Destination.PRO).forEach { tool ->
+                    OutlinedButton(onClick = { showMore = false; navigate(tool) }, modifier = Modifier.fillMaxWidth()) { Text(tool.label) }
+                }
+            }
+        }
+    }
     Scaffold(bottomBar = {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -72,8 +87,8 @@ fun AppShell() {
                 NavigationBar {
                     listOf(Destination.BOX, Destination.ARCHITECT, Destination.TANK, Destination.MORE).forEach { target ->
                         NavigationBarItem(
-                            selected = destination == target,
-                            onClick = { navigate(target) },
+                            selected = if (target == Destination.MORE) showMore else destination == target,
+                            onClick = { if (target == Destination.MORE) showMore = true else navigate(target) },
                             icon = { Text(when (target) {
                                 Destination.BOX -> "▱"
                                 Destination.ARCHITECT -> "▥"
