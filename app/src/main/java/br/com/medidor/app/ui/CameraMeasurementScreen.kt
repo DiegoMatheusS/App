@@ -12,6 +12,8 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -241,7 +243,21 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                         }
                 }
             }
-            Box(Modifier.fillMaxWidth().height(340.dp)) {
+            var photoZoom by remember(photo) { mutableStateOf(1f) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1f, 2f, 3f, 4f).forEach { factor ->
+                    FilterChip(selected = photoZoom == factor,
+                        onClick = { photoZoom = factor },
+                        label = { Text(factor.toInt().toString() + "×") })
+                }
+            }
+            Text("Zoom para posicionar pontos pequenos. Volte a 1× para ver a foto inteira.",
+                style = MaterialTheme.typography.bodySmall)
+            Box(Modifier.fillMaxWidth().height(340.dp).clipToBounds()) {
+                Box(Modifier.fillMaxSize().graphicsLayer {
+                    scaleX = photoZoom
+                    scaleY = photoZoom
+                }) {
                 Image(
                     bitmap = photo.asImageBitmap(),
                     contentDescription = "Foto capturada para medição",
@@ -306,6 +322,7 @@ fun CameraMeasurementScreen(onSave: (String, String) -> Unit) {
                             Offset(rect.left + rect.width * b.x, rect.top + rect.height * b.y),
                             strokeWidth = 3.dp.toPx())
                     }
+                }
                 }
             }
             if (points.isNotEmpty()) {
