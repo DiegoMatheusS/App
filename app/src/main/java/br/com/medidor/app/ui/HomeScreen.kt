@@ -36,7 +36,7 @@ fun HomeScreen(onOpen: (Destination) -> Unit) {
             Triple("Contar objetos", "Contagem ao vivo", Destination.COUNT),
             Triple("Modo Arquiteto", "Plantas e maquete", Destination.ARCHITECT)
         )
-        LazyVerticalGrid(columns = GridCells.Fixed(2),
+        LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(items.size) { i ->
