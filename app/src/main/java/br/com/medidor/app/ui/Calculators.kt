@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -40,11 +41,11 @@ internal fun decimal(value: Double): String =
     NumberFormat.getNumberInstance(Locale("pt", "BR")).apply { maximumFractionDigits = 3 }.format(value)
 
 @Composable
-internal fun DimensionField(label: String, value: String, onChange: (String) -> Unit) {
+internal fun DimensionField(label: String, value: String, modifier: Modifier = Modifier.widthIn(max = 200.dp), onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         label = { Text(label) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -69,8 +70,10 @@ fun BoxCalculatorScreen(onSave: (String, String) -> Unit) {
         Text("Caixa ou ambiente retangular", style = MaterialTheme.typography.titleLarge)
         Text("Informe as medidas internas em metros para calcular a capacidade útil.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        DimensionField("Comprimento (m)", length) { length = it; saved = false }
-        DimensionField("Largura (m)", width) { width = it; saved = false }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DimensionField("Comprimento", length, Modifier.weight(1f)) { length = it; saved = false }
+            DimensionField("Largura", width, Modifier.weight(1f)) { width = it; saved = false }
+        }
         DimensionField("Altura / profundidade (m)", height) { height = it; saved = false }
         if (!valid) {
             Text("Preencha todas as dimensões com números positivos.", color = MaterialTheme.colorScheme.error)
@@ -125,10 +128,11 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
                 label = { Text(option.label) }
             )
         }
-        DimensionField("Diâmetro interno (m)", diameter) { diameter = it; saved = false }
-        if (selected != TankShape.SPHERE) {
-            DimensionField(if (selected == TankShape.VERTICAL) "Altura útil (m)" else "Comprimento interno (m)",
-                size) { size = it; saved = false }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DimensionField("Diâmetro (m)", diameter, Modifier.weight(1f)) { diameter = it; saved = false }
+            if (selected != TankShape.SPHERE) {
+                DimensionField(if (selected == TankShape.VERTICAL) "Altura (m)" else "Comprimento (m)", size, Modifier.weight(1f)) { size = it; saved = false }
+            }
         }
         Text("Altura atual do líquido ou produto, medida a partir do fundo:",
             style = MaterialTheme.typography.titleSmall)
