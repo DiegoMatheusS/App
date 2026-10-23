@@ -37,7 +37,8 @@ enum class Destination(val label: String) {
     PRO("Pro completo"),
     ARCHITECT("Modo Arquiteto"),
     SCANNER("Scanner 3D"),
-    COUNT("Contador de objetos")
+    COUNT("Contador de objetos"),
+    MORE("Mais ferramentas")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,7 +58,7 @@ fun AppShell() {
 
     Scaffold(bottomBar = {
         NavigationBar {
-            listOf(Destination.HOME, Destination.PHOTO, Destination.COUNT, Destination.HISTORY).forEach { target ->
+            listOf(Destination.HOME, Destination.PHOTO, Destination.COUNT, Destination.MORE).forEach { target ->
                 NavigationBarItem(selected = destination == target,
                     onClick = { navigate(target) }, icon = { Text(when(target) {
                         Destination.HOME -> "⌂"
@@ -98,6 +99,7 @@ fun AppShell() {
                 Destination.ARCHITECT -> ArchitectScreen()
                 Destination.SCANNER -> ScannerCaptureScreen()
                 Destination.COUNT -> ObjectCountHome(onSave = ::addRecord)
+                Destination.MORE -> MoreToolsScreen(onOpen = ::navigate)
             }
         }
     }
