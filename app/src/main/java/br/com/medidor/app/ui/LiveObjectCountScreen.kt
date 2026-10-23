@@ -40,6 +40,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import br.com.medidor.app.domain.CountRegion
 import br.com.medidor.app.domain.LiveObjectCounter
+import br.com.medidor.app.domain.LiveCountStabilizer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -60,6 +61,8 @@ fun LiveObjectCountScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<CountFrame?>(null) }
     var sensitivity by remember { mutableStateOf(45) }
+    var stableCount by remember { mutableStateOf<Int?>(null) }
+    val stabilizer = remember { LiveCountStabilizer() }
     val threshold = remember { AtomicInteger(45) }
     val preview = remember(context) {
         PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
@@ -101,9 +104,12 @@ fun LiveObjectCountScreen() {
                             if (sampled != null) {
                                 val regions = LiveObjectCounter.detect(sampled.pixels,
                                     sampled.width, sampled.height, threshold.get())
+                                val confirmed = stabilizer.update(regions.size)
                                 main.execute {
-                                    if (!disposed.get()) result = CountFrame(sampled.width,
-                                        sampled.height, regions)
+                                    if (!disposed.get()) {
+                                        result = CountFrame(sampled.width, sampled.height, regions)
+                                        stableCount = confirmed
+                                    }
                                 }
                             }
                         }
@@ -145,18 +151,23 @@ fun LiveObjectCountScreen() {
         Text("Contagem automática ao vivo — experimental",
             style = MaterialTheme.typography.titleMedium)
         Text("Aponte para objetos separados, com fundo uniforme e boa iluminação. Contagem aproximada; itens encostados podem ser unidos.")
-        Text("Regiões detectadas: ${result?.regions?.size ?: 0}",
+        Text("Contagem estabilizada: ${stableCount?.toString() ?: "Analisando…"}",
             style = MaterialTheme.typography.headlineSmall)
         Box(Modifier.fillMaxWidth().height(360.dp)) {
             AndroidView(factory = { preview }, modifier = Modifier.fillMaxSize())
             Canvas(Modifier.fillMaxSize()) {
                 val frame = result ?: return@Canvas
                 frame.regions.forEach { region ->
+                    val color = Color(0xFF44E8B5)
+                    region.outline.forEach { point ->
+                        drawCircle(color, 1.5.dp.toPx(), Offset(
+                            size.width * point.x / frame.width,
+                            size.height * point.y / frame.height))
+                    }
                     val left = size.width * region.left / frame.width
                     val top = size.height * region.top / frame.height
                     val right = size.width * (region.right + 1f) / frame.width
                     val bottom = size.height * (region.bottom + 1f) / frame.height
-                    val color = Color(0xFF44E8B5)
                     drawLine(color, Offset(left, top), Offset(right, top), 2.dp.toPx())
                     drawLine(color, Offset(right, top), Offset(right, bottom), 2.dp.toPx())
                     drawLine(color, Offset(right, bottom), Offset(left, bottom), 2.dp.toPx())
@@ -170,6 +181,8 @@ fun LiveObjectCountScreen() {
                 OutlinedButton(enabled = sensitivity != value, onClick = {
                     sensitivity = value
                     threshold.set(value)
+                    stabilizer.reset()
+                    stableCount = null
                     result = null
                 }) { Text(label) }
             }
