@@ -76,7 +76,7 @@ fun AppShell() {
                 Destination.PRO -> ProScreen()
                 Destination.ARCHITECT -> ArchitectScreen()
                 Destination.SCANNER -> ScannerCaptureScreen()
-                Destination.COUNT -> ObjectCountScreen(onSave = ::addRecord)
+                Destination.COUNT -> ObjectCountHome(onSave = ::addRecord)
             }
         }
     }
