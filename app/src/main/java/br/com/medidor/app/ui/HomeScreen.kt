@@ -1,68 +1,69 @@
 package br.com.medidor.app.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.background
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun HomeScreen(onOpen: (Destination) -> Unit) {
-    Column(
-        modifier = Modifier.verticalScroll(rememberScrollState()).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text("Ferramentas de medição", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Calcule medidas e volumes offline. Capture uma foto e calibre com uma moeda conhecida.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        ToolCard("Medir e calcular", "Caixas, áreas e volumes", "GRÁTIS", onClick = { onOpen(Destination.BOX) })
-        ToolCard("Medir por fotografia", "Capture uma foto, marque a moeda e o objeto no mesmo plano", "GRÁTIS",
-            onClick = { onOpen(Destination.PHOTO) })
-        ToolCard("Tanques e reservatórios", "Cilíndricos e esféricos, volume total e ocupado", "GRÁTIS · BASE",
-            onClick = { onOpen(Destination.TANK) })
-        ToolCard("Minhas medições", "Registros salvos apenas neste aparelho", "GRÁTIS",
-            onClick = { onOpen(Destination.HISTORY) })
-        Spacer(Modifier.height(6.dp))
-        Text("Próximos módulos", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        ToolCard("Modo Arquiteto", "Plantas, portas, janelas e maquete 3D interativa", "PRÉVIA · PRO",
-            onClick = { onOpen(Destination.ARCHITECT) })
-        ToolCard("Scanner 3D — captura guiada", "Fotografe o objeto em várias posições e salve uma sessão", "PRÉVIA · PRO",
-            onClick = { onOpen(Destination.SCANNER) })
-        ToolCard("Contador de objetos", "Marque e conte objetos visíveis em fotografias, offline", "PRÉVIA · GRÁTIS",
-            onClick = { onOpen(Destination.COUNT) })
-        ToolCard("Pro completo", "Compra única planejada: R$ 129,90", "EM DESENVOLVIMENTO",
-            onClick = { onOpen(Destination.PRO) })
-        Text("Medições por foto são estimativas planas; não substituem instrumentos certificados.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    var cameraOn by remember { mutableStateOf(true) }
+    Column(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("AppMétricas", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            TextButton(onClick = { cameraOn = !cameraOn }) {
+                Text(if (cameraOn) "Desligar câmera" else "Ligar câmera")
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(210.dp).background(Color.Black)) {
+            if (cameraOn) HomeCameraPreview()
+            else Text("Câmera desligada", color = Color.White, modifier = Modifier.padding(20.dp))
+        }
+        Button(onClick = { onOpen(Destination.PHOTO) }, modifier = Modifier.fillMaxWidth()) {
+            Text("Medir pela câmera")
+        }
+        Text("Principais ferramentas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        val items = listOf(
+            Triple("Medir e calcular", "Caixas, áreas e volume", Destination.BOX),
+            Triple("Tanques", "Capacidade e nível", Destination.TANK),
+            Triple("Contar objetos", "Contagem ao vivo", Destination.COUNT),
+            Triple("Modo Arquiteto", "Plantas e maquete", Destination.ARCHITECT)
+        )
+        LazyVerticalGrid(columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(items.size) { i ->
+                val item = items[i]
+                Card(Modifier.fillMaxWidth().height(120.dp).clickable { onOpen(item.third) },
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(item.first, fontWeight = FontWeight.SemiBold)
+                        Text(item.second, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun ToolCard(title: String, subtitle: String, status: String, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(status, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+fun MoreToolsScreen(onOpen: (Destination) -> Unit) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Mais ferramentas", style = MaterialTheme.typography.titleLarge)
+        listOf(
+            Destination.HISTORY, Destination.SCANNER, Destination.PRO,
+            Destination.ARCHITECT, Destination.TANK
+        ).forEach { destination ->
+            OutlinedButton(onClick = { onOpen(destination) },modifier=Modifier.fillMaxWidth()) {
+                Text(destination.label)
+            }
         }
     }
 }
