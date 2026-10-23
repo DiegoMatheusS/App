@@ -20,15 +20,15 @@ android {
     val keyFile = System.getenv("APPMETRICAS_KEYSTORE_PATH")
     val keyPassword = System.getenv("APPMETRICAS_KEYSTORE_PASSWORD")
     val alias = System.getenv("APPMETRICAS_KEY_ALIAS")
-    val aliasPassword = System.getenv("APPMETRICAS_KEY_PASSWORD")
-    val signedRelease = listOf(keyFile, keyPassword, alias, aliasPassword).all { !it.isNullOrBlank() }
+    val privateKeySecret = System.getenv("APPMETRICAS_KEY_PASSWORD")
+    val signedRelease = listOf(keyFile, keyPassword, alias, privateKeySecret).all { !it.isNullOrBlank() }
     signingConfigs {
         if (signedRelease) {
             create("appmetricasRelease") {
                 storeFile = file(keyFile!!)
                 storePassword = keyPassword
                 keyAlias = alias
-                keyPassword = aliasPassword
+                keyPassword = privateKeySecret
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
