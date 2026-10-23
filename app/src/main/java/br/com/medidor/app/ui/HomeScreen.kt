@@ -43,7 +43,7 @@ fun HomeScreen(onOpen: (Destination) -> Unit) {
             onClick = { onOpen(Destination.ARCHITECT) })
         ToolCard("Scanner 3D — captura guiada", "Fotografe o objeto em várias posições e salve uma sessão", "PRÉVIA · PRO",
             onClick = { onOpen(Destination.SCANNER) })
-        ToolCard("Contador de objetos", "Tijolos, peças e caixas com IA local", "PLANEJADO · PRO",
+        ToolCard("Contador de objetos", "Marque e conte objetos visíveis em fotografias, offline", "PRÉVIA · GRÁTIS",
             onClick = { onOpen(Destination.COUNT) })
         ToolCard("Pro completo", "Compra única planejada: R$ 129,90", "EM DESENVOLVIMENTO",
             onClick = { onOpen(Destination.PRO) })
