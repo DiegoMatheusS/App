@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.BackHandler
@@ -57,20 +60,35 @@ fun AppShell() {
     fun addRecord(title: String, details: String) { records = store.save(title, details) }
 
     Scaffold(bottomBar = {
-        NavigationBar {
-            listOf(Destination.HOME, Destination.PHOTO, Destination.COUNT, Destination.MORE).forEach { target ->
-                NavigationBarItem(selected = destination == target,
-                    onClick = { navigate(target) }, icon = { Text(when(target) {
-                        Destination.HOME -> "⌂"
-                        Destination.PHOTO -> "◎"
-                        Destination.COUNT -> "#"
-                        else -> "▤"
-                    }) }, label = { Text(when(target) {
-                        Destination.HOME -> "Início"
-                        Destination.PHOTO -> "Câmera"
-                        Destination.COUNT -> "Contar"
-                        else -> "Mais"
-                    }) })
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            tonalElevation = 3.dp,
+            shadowElevation = 4.dp
+        ) {
+            Column {
+                Text("Ferramentas", style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(start = 18.dp, top = 8.dp))
+                NavigationBar {
+                    listOf(Destination.BOX, Destination.ARCHITECT, Destination.TANK, Destination.MORE).forEach { target ->
+                        NavigationBarItem(
+                            selected = destination == target,
+                            onClick = { navigate(target) },
+                            icon = { Text(when (target) {
+                                Destination.BOX -> "▱"
+                                Destination.ARCHITECT -> "▥"
+                                Destination.TANK -> "◯"
+                                else -> "⋯"
+                            }) },
+                            label = { Text(when (target) {
+                                Destination.BOX -> "Medição"
+                                Destination.ARCHITECT -> "Arquiteto"
+                                Destination.TANK -> "Tanques"
+                                else -> "Mais"
+                            }) }
+                        )
+                    }
+                }
             }
         }
     }, topBar = {
