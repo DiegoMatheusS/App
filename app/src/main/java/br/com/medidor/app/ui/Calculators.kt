@@ -72,6 +72,7 @@ fun BoxCalculatorScreen(onSave: (String, String) -> Unit, onCamera: () -> Unit =
         Text("Caixa ou ambiente retangular", style = MaterialTheme.typography.titleLarge)
         Text("Informe as medidas internas em metros para calcular a capacidade útil.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        BoxMeasurementGuide()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DimensionField("Comprimento", length, Modifier.weight(1f)) { length = it; saved = false }
             DimensionField("Largura", width, Modifier.weight(1f)) { width = it; saved = false }
@@ -135,10 +136,7 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit, onCamera: () -> Unit 
             }
         )
         TankOutline(TankIllustration.valueOf(illustration), Modifier.fillMaxWidth().padding(vertical = 8.dp).height(120.dp))
-        Text("Esquema ilustrativo: diâmetro é a largura da seção circular; " +
-            "altura ou comprimento é a dimensão longitudinal do tanque.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TankMeasurementGuide(selected)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DimensionField("Diâmetro (m)", diameter, Modifier.weight(1f)) { diameter = it; saved = false }
             if (selected != TankShape.SPHERE) {
@@ -220,6 +218,40 @@ private fun CameraFirstAction(onCamera: () -> Unit) {
                 Text("Calcular com a câmera")
             }
             Text("Ou informe manualmente as dimensões abaixo.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun BoxMeasurementGuide() {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Como medir a caixa", style = MaterialTheme.typography.titleSmall)
+            Text("Comprimento: de uma extremidade à outra da base.")
+            Text("Largura: outra dimensão horizontal da base.")
+            Text("Altura: da base até o topo, na vertical.")
+            Text("Use medidas internas para calcular a capacidade útil.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun TankMeasurementGuide(shape: TankShape) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Entenda as medidas", style = MaterialTheme.typography.titleSmall)
+            Text("Diâmetro: distância entre duas bordas opostas, passando pelo centro da seção circular.")
+            when (shape) {
+                TankShape.VERTICAL -> Text("Altura: distância vertical entre o fundo e o topo interno.")
+                TankShape.HORIZONTAL -> Text("Comprimento: distância interna entre as duas extremidades do tanque deitado.")
+                TankShape.SPHERE -> Text("Na esfera, o diâmetro é suficiente para calcular a capacidade.")
+            }
+            Text("Nível: altura do líquido medida a partir do ponto mais baixo do fundo.")
+            Text("Os desenhos são ilustrativos; formato longo ou gordão não muda a fórmula do cilindro.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
