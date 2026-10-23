@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,9 +52,27 @@ fun AppShell() {
         if (destination == Destination.HISTORY) records = store.load()
     }
     fun navigate(to: Destination) { destinationName = to.name }
+    BackHandler(enabled = destination != Destination.HOME) { navigate(Destination.HOME) }
     fun addRecord(title: String, details: String) { records = store.save(title, details) }
 
-    Scaffold(topBar = {
+    Scaffold(bottomBar = {
+        NavigationBar {
+            listOf(Destination.HOME, Destination.PHOTO, Destination.COUNT, Destination.HISTORY).forEach { target ->
+                NavigationBarItem(selected = destination == target,
+                    onClick = { navigate(target) }, icon = { Text(when(target) {
+                        Destination.HOME -> "⌂"
+                        Destination.PHOTO -> "◎"
+                        Destination.COUNT -> "#"
+                        else -> "▤"
+                    }) }, label = { Text(when(target) {
+                        Destination.HOME -> "Início"
+                        Destination.PHOTO -> "Câmera"
+                        Destination.COUNT -> "Contar"
+                        else -> "Mais"
+                    }) })
+            }
+        }
+    }, topBar = {
         TopAppBar(
             title = { Text(destination.label, style = MaterialTheme.typography.titleLarge) },
             navigationIcon = {
