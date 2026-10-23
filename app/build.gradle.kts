@@ -18,15 +18,15 @@ android {
 
     // Signed releases require secrets at build time. Never commit the keystore.
     val keyFile = System.getenv("APPMETRICAS_KEYSTORE_PATH")
-    val keyPassword = System.getenv("APPMETRICAS_KEYSTORE_PASSWORD")
+    val storePasswordSecret = System.getenv("APPMETRICAS_KEYSTORE_PASSWORD")
     val alias = System.getenv("APPMETRICAS_KEY_ALIAS")
     val privateKeySecret = System.getenv("APPMETRICAS_KEY_PASSWORD")
-    val signedRelease = listOf(keyFile, keyPassword, alias, privateKeySecret).all { !it.isNullOrBlank() }
+    val signedRelease = listOf(keyFile, storePasswordSecret, alias, privateKeySecret).all { !it.isNullOrBlank() }
     signingConfigs {
         if (signedRelease) {
             create("appmetricasRelease") {
                 storeFile = file(keyFile!!)
-                storePassword = keyPassword
+                storePassword = storePasswordSecret
                 keyAlias = alias
                 keyPassword = privateKeySecret
                 enableV1Signing = true
