@@ -95,6 +95,7 @@ fun BoxCalculatorScreen(onSave: (String, String) -> Unit) {
 @Composable
 fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
     var shape by rememberSaveable { mutableStateOf(TankShape.VERTICAL.name) }
+    var illustration by rememberSaveable { mutableStateOf(TankIllustration.VERTICAL.name) }
     var diameter by rememberSaveable { mutableStateOf("8") }
     var size by rememberSaveable { mutableStateOf("12") }
     var level by rememberSaveable { mutableStateOf("5") }
@@ -121,13 +122,19 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
         Text("Quantidade armazenada no tanque", style = MaterialTheme.typography.titleLarge)
         Text("Use dimensões INTERNAS em metros. Tanques ideais, sem acessórios e sem perdas.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TankShape.entries.forEach { option ->
-            FilterChip(
-                selected = option == selected,
-                onClick = { shape = option.name; saved = false },
-                label = { Text(option.label) }
-            )
-        }
+        Text("Escolha o tipo de tanque", style = MaterialTheme.typography.titleMedium)
+        TankIllustrationPicker(
+            selected = TankIllustration.valueOf(illustration),
+            onSelect = { option ->
+                illustration = option.name
+                shape = option.geometry.name
+                saved = false
+            }
+        )
+        Text("Esquema ilustrativo: diâmetro é a largura da seção circular; " +
+            "altura ou comprimento é a dimensão longitudinal do tanque.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DimensionField("Diâmetro (m)", diameter, Modifier.weight(1f)) { diameter = it; saved = false }
             if (selected != TankShape.SPHERE) {
@@ -159,6 +166,7 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
         Text("Informe a densidade aparente do produto para estimar também a massa. " +
             "Para sólidos a granel, superfície irregular e compactação podem alterar a estimativa.",
             style = MaterialTheme.typography.bodySmall)
+        Text("Resultado das medidas", style = MaterialTheme.typography.titleMedium)
         if (!valid) {
             Text("Verifique as medidas. O nível deve ficar entre zero e a altura total " +
                 "(${maxLevel?.let(::decimal) ?: "—"} m).",
