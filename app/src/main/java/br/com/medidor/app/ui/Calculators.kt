@@ -41,11 +41,11 @@ internal fun decimal(value: Double): String =
     NumberFormat.getNumberInstance(Locale("pt", "BR")).apply { maximumFractionDigits = 3 }.format(value)
 
 @Composable
-internal fun DimensionField(label: String, value: String, onChange: (String) -> Unit) {
+internal fun DimensionField(label: String, value: String, modifier: Modifier = Modifier.widthIn(max = 200.dp), onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier.widthIn(max = 200.dp),
+        modifier = modifier,
         label = { Text(label) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -71,8 +71,8 @@ fun BoxCalculatorScreen(onSave: (String, String) -> Unit) {
         Text("Informe as medidas internas em metros para calcular a capacidade útil.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DimensionField("Comprimento", length) { length = it; saved = false }
-            DimensionField("Largura", width) { width = it; saved = false }
+            DimensionField("Comprimento", length, Modifier.weight(1f)) { length = it; saved = false }
+            DimensionField("Largura", width, Modifier.weight(1f)) { width = it; saved = false }
         }
         DimensionField("Altura / profundidade (m)", height) { height = it; saved = false }
         if (!valid) {
@@ -129,9 +129,9 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DimensionField("Diâmetro (m)", diameter) { diameter = it; saved = false }
+            DimensionField("Diâmetro (m)", diameter, Modifier.weight(1f)) { diameter = it; saved = false }
             if (selected != TankShape.SPHERE) {
-                DimensionField(if (selected == TankShape.VERTICAL) "Altura (m)" else "Comprimento (m)", size) { size = it; saved = false }
+                DimensionField(if (selected == TankShape.VERTICAL) "Altura (m)" else "Comprimento (m)", size, Modifier.weight(1f)) { size = it; saved = false }
             }
         }
         Text("Altura atual do líquido ou produto, medida a partir do fundo:",
