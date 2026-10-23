@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -53,7 +54,7 @@ internal fun DimensionField(label: String, value: String, modifier: Modifier = M
 }
 
 @Composable
-fun BoxCalculatorScreen(onSave: (String, String) -> Unit) {
+fun BoxCalculatorScreen(onSave: (String, String) -> Unit, onCamera: () -> Unit = {}) {
     var length by rememberSaveable { mutableStateOf("0,50") }
     var width by rememberSaveable { mutableStateOf("0,40") }
     var height by rememberSaveable { mutableStateOf("0,30") }
@@ -67,6 +68,7 @@ fun BoxCalculatorScreen(onSave: (String, String) -> Unit) {
     val surface = if (valid) Geometry.rectangularSurfaceArea(l!!, w!!, h!!) else null
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        CameraFirstAction(onCamera)
         Text("Caixa ou ambiente retangular", style = MaterialTheme.typography.titleLarge)
         Text("Informe as medidas internas em metros para calcular a capacidade útil.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -93,7 +95,7 @@ fun BoxCalculatorScreen(onSave: (String, String) -> Unit) {
 }
 
 @Composable
-fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
+fun TankCalculatorScreen(onSave: (String, String) -> Unit, onCamera: () -> Unit = {}) {
     var shape by rememberSaveable { mutableStateOf(TankShape.VERTICAL.name) }
     var illustration by rememberSaveable { mutableStateOf(TankIllustration.VERTICAL.name) }
     var diameter by rememberSaveable { mutableStateOf("8") }
@@ -119,6 +121,7 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
         TankFillInput.estimatedMassKg(result.occupiedM3, density) else null
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        CameraFirstAction(onCamera)
         Text("Quantidade armazenada no tanque", style = MaterialTheme.typography.titleLarge)
         Text("Use dimensões INTERNAS em metros. Tanques ideais, sem acessórios e sem perdas.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -131,6 +134,7 @@ fun TankCalculatorScreen(onSave: (String, String) -> Unit) {
                 saved = false
             }
         )
+        TankOutline(TankIllustration.valueOf(illustration), Modifier.fillMaxWidth().padding(vertical = 8.dp).height(120.dp))
         Text("Esquema ilustrativo: diâmetro é a largura da seção circular; " +
             "altura ou comprimento é a dimensão longitudinal do tanque.",
             style = MaterialTheme.typography.bodySmall,
@@ -204,6 +208,20 @@ internal fun ResultCard(label: String, value: String) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(label, style = MaterialTheme.typography.labelLarge)
             Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun CameraFirstAction(onCamera: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Button(onClick = onCamera, modifier = Modifier.fillMaxWidth()) {
+                Text("Calcular com a câmera")
+            }
+            Text("Ou informe manualmente as dimensões abaixo.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
